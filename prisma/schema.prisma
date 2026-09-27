@@ -1,0 +1,995 @@
+// KISS V-TRACK — Prisma Schema
+// Vocational Training & Skill Tracking System
+// PostgreSQL with comprehensive relational model
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ORGANIZATION & CAMPUS
+// ============================================================
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String?
+  logo        String?
+  website     String?
+  email       String?
+  phone       String?
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campuses Campus[]
+
+  @@map("organizations")
+}
+
+model Campus {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  code           String       @unique
+  description    String?
+  address        String?
+  city           String?
+  state          String?
+  pincode        String?
+  phone          String?
+  email          String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  users            User[]
+  trainees         Trainee[]
+  trainers         Trainer[]
+  trainingBatches  TrainingBatch[]
+
+  @@map("campuses")
+}
+
+// ============================================================
+// USERS, ROLES & PERMISSIONS
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  CENTRE_ADMIN
+  TRAINER
+  TRAINEE
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String
+  role          UserRole
+  firstName     String
+  lastName      String
+  phone         String?
+  profilePhoto  String?
+  campusId      String?
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  lastLoginAt   DateTime?
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  campus Campus? @relation(fields: [campusId], references: [id])
+
+  trainee       Trainee?
+  trainer       Trainer?
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  attendanceMarkedBy Attendance[] @relation("MarkedByUser")
+  certificatesIssuedBy Certificate[] @relation("IssuedByUser")
+
+  @@index([email])
+  @@index([role])
+  @@index([campusId])
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  token        String   @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  isValid      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ============================================================
+// TRAINEE
+// ============================================================
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum EnrollmentStatusType {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+  SUSPENDED
+  WITHDRAWN
+}
+
+model Trainee {
+  id              String              @id @default(uuid())
+  userId          String              @unique
+  studentId       String              @unique
+  dateOfBirth     DateTime?
+  gender          Gender?
+  className       String?
+  academicYear    String?
+  department      String?
+  campusId        String
+  guardianName    String?
+  guardianPhone   String?
+  address         String?
+  enrollmentStatus EnrollmentStatusType @default(ACTIVE)
+  enrollmentDate  DateTime            @default(now())
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus   Campus  @relation(fields: [campusId], references: [id])
+
+  enrollments     Enrollment[]
+  attendances     Attendance[]
+  traineeSkills   TraineeSkill[]
+  practicalSubmissions PracticalSubmission[]
+  products        Product[]
+  assessments     Assessment[]
+  certificates    Certificate[]
+
+  @@index([studentId])
+  @@index([campusId])
+  @@index([enrollmentStatus])
+  @@map("trainees")
+}
+
+// ============================================================
+// TRAINER
+// ============================================================
+
+model Trainer {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  employeeId      String   @unique
+  qualification   String?
+  specialization  String?
+  experience      String?
+  campusId        String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus Campus @relation(fields: [campusId], references: [id])
+
+  trainerCategories  TrainerCategory[]
+  trainingBatches    TrainingBatch[]
+  trainingSessions   TrainingSession[]
+  attendancesMarked  Attendance[]
+  practicalTasks     PracticalTask[]
+  skillVerifications TraineeSkill[]    @relation("VerifiedByTrainer")
+  assessments        Assessment[]
+  productReviews     ProductReview[]
+
+  @@index([employeeId])
+  @@index([campusId])
+  @@map("trainers")
+}
+
+model TrainerCategory {
+  id         String @id @default(uuid())
+  trainerId  String
+  categoryId String
+
+  trainer  Trainer            @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  category VocationalCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([trainerId, categoryId])
+  @@map("trainer_categories")
+}
+
+// ============================================================
+// VOCATIONAL CATEGORIES & ELECTIVES
+// ============================================================
+
+model VocationalCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  electives         VocationalElective[]
+  skills            Skill[]
+  trainerCategories TrainerCategory[]
+
+  @@map("vocational_categories")
+}
+
+enum ElectiveStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+  DISCONTINUED
+}
+
+model VocationalElective {
+  id                    String         @id @default(uuid())
+  categoryId            String
+  name                  String
+  code                  String         @unique
+  description           String?
+  objectives            String?
+  durationWeeks         Int?
+  totalTrainingHours    Int
+  theoryHours           Int
+  practicalHours        Int
+  requiredAttendancePct Float          @default(80)
+  completionRequirements String?
+  status                ElectiveStatus @default(DRAFT)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  category VocationalCategory @relation(fields: [categoryId], references: [id])
+
+  modules          Module[]
+  trainingBatches  TrainingBatch[]
+  completionRules  CompletionRule[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@map("vocational_electives")
+}
+
+// ============================================================
+// MODULES
+// ============================================================
+
+model Module {
+  id                String   @id @default(uuid())
+  electiveId        String
+  name              String
+  description       String?
+  sequenceOrder     Int      @default(0)
+  theoryHours       Int      @default(0)
+  practicalHours    Int      @default(0)
+  learningObjectives String?
+  completionCriteria String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  elective VocationalElective @relation(fields: [electiveId], references: [id], onDelete: Cascade)
+
+  moduleSkills      ModuleSkill[]
+  trainingSessions  TrainingSession[]
+  practicalTasks    PracticalTask[]
+
+  @@unique([electiveId, sequenceOrder])
+  @@index([electiveId])
+  @@map("modules")
+}
+
+// ============================================================
+// SKILLS
+// ============================================================
+
+enum SkillDifficulty {
+  BEGINNER
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+model Skill {
+  id                String          @id @default(uuid())
+  categoryId        String
+  name              String
+  code              String          @unique
+  description       String?
+  difficulty        SkillDifficulty @default(BEGINNER)
+  learningObjectives String?
+  assessmentCriteria String?
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  category VocationalCategory @relation(fields: [categoryId], references: [id])
+
+  moduleSkills     ModuleSkill[]
+  traineeSkills    TraineeSkill[]
+  productSkills    ProductSkill[]
+  assessmentSkills AssessmentSkill[]
+
+  @@index([categoryId])
+  @@index([code])
+  @@map("skills")
+}
+
+model ModuleSkill {
+  id       String @id @default(uuid())
+  moduleId String
+  skillId  String
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  skill  Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, skillId])
+  @@map("module_skills")
+}
+
+// ============================================================
+// TRAINING BATCH & ENROLLMENT
+// ============================================================
+
+enum BatchStatus {
+  DRAFT
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model TrainingBatch {
+  id           String      @id @default(uuid())
+  electiveId   String
+  campusId     String
+  trainerId    String?
+  name         String
+  code         String      @unique
+  startDate    DateTime
+  endDate      DateTime
+  capacity     Int         @default(30)
+  status       BatchStatus @default(DRAFT)
+  description  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  elective VocationalElective @relation(fields: [electiveId], references: [id])
+  campus   Campus             @relation(fields: [campusId], references: [id])
+  trainer  Trainer?           @relation(fields: [trainerId], references: [id])
+
+  enrollments      Enrollment[]
+  trainingSessions TrainingSession[]
+  products         Product[]
+
+  @@index([electiveId])
+  @@index([campusId])
+  @@index([trainerId])
+  @@index([status])
+  @@map("training_batches")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+  TRANSFERRED
+  CANCELLED
+}
+
+model Enrollment {
+  id             String           @id @default(uuid())
+  traineeId      String
+  batchId        String
+  enrollmentDate DateTime         @default(now())
+  completionDate DateTime?
+  status         EnrollmentStatus @default(ACTIVE)
+  remarks        String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  trainee Trainee       @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  batch   TrainingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([traineeId, batchId])
+  @@index([traineeId])
+  @@index([batchId])
+  @@index([status])
+  @@map("enrollments")
+}
+
+// ============================================================
+// TRAINING SCHEDULE & SESSIONS
+// ============================================================
+
+enum SessionType {
+  THEORY
+  PRACTICAL
+  WORKSHOP
+  PROJECT
+  ASSESSMENT
+}
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+model TrainingSession {
+  id          String        @id @default(uuid())
+  batchId     String
+  trainerId   String
+  moduleId    String?
+  date        DateTime
+  startTime   String        // HH:mm format
+  endTime     String        // HH:mm format
+  durationMin Int
+  location    String?
+  sessionType SessionType   @default(THEORY)
+  topic       String?
+  description String?
+  status      SessionStatus @default(SCHEDULED)
+  remarks     String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  batch   TrainingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  trainer Trainer       @relation(fields: [trainerId], references: [id])
+  module  Module?       @relation(fields: [moduleId], references: [id])
+
+  attendances Attendance[]
+
+  @@index([batchId])
+  @@index([trainerId])
+  @@index([date])
+  @@index([status])
+  @@map("training_sessions")
+}
+
+// ============================================================
+// ATTENDANCE
+// ============================================================
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model Attendance {
+  id         String           @id @default(uuid())
+  traineeId  String
+  sessionId  String
+  trainerId  String?
+  status     AttendanceStatus @default(ABSENT)
+  markedById String?
+  markedAt   DateTime         @default(now())
+  remarks    String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  trainee  Trainee          @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  session  TrainingSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  trainer  Trainer?         @relation(fields: [trainerId], references: [id])
+  markedBy User?            @relation("MarkedByUser", fields: [markedById], references: [id])
+
+  @@unique([traineeId, sessionId])
+  @@index([traineeId])
+  @@index([sessionId])
+  @@map("attendances")
+}
+
+// ============================================================
+// TRAINEE SKILLS
+// ============================================================
+
+enum SkillStatus {
+  NOT_STARTED
+  LEARNING
+  PRACTICING
+  ASSESSED
+  VERIFIED
+}
+
+enum SkillLevel {
+  BEGINNER
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  MASTERED
+}
+
+model TraineeSkill {
+  id              String      @id @default(uuid())
+  traineeId       String
+  skillId         String
+  status          SkillStatus @default(NOT_STARTED)
+  level           SkillLevel  @default(BEGINNER)
+  progressPct     Float       @default(0)
+  dateStarted     DateTime?
+  dateLearned     DateTime?
+  dateAssessed    DateTime?
+  dateVerified    DateTime?
+  verifiedById    String?
+  assessmentNotes String?
+  evidenceNotes   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  trainee    Trainee  @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  skill      Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  verifiedBy Trainer? @relation("VerifiedByTrainer", fields: [verifiedById], references: [id])
+
+  skillEvidence SkillEvidence[]
+
+  @@unique([traineeId, skillId])
+  @@index([traineeId])
+  @@index([skillId])
+  @@index([status])
+  @@map("trainee_skills")
+}
+
+// ============================================================
+// SKILL EVIDENCE
+// ============================================================
+
+enum EvidenceType {
+  PRACTICAL_TASK
+  PRODUCT
+  PROJECT
+  PHOTOGRAPH
+  DOCUMENT
+  TRAINER_OBSERVATION
+  ASSESSMENT
+  OTHER
+}
+
+model SkillEvidence {
+  id             String       @id @default(uuid())
+  traineeSkillId String
+  type           EvidenceType
+  title          String
+  description    String?
+  fileUrl        String?
+  submittedAt    DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  traineeSkill TraineeSkill @relation(fields: [traineeSkillId], references: [id], onDelete: Cascade)
+
+  @@index([traineeSkillId])
+  @@map("skill_evidence")
+}
+
+// ============================================================
+// PRACTICAL TASKS
+// ============================================================
+
+enum TaskStatus {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  CLOSED
+}
+
+model PracticalTask {
+  id              String     @id @default(uuid())
+  trainerId       String
+  moduleId        String?
+  batchId         String?
+  title           String
+  description     String?
+  instructions    String?
+  requiredSkills  String?    // JSON array of skill names
+  deadline        DateTime?
+  evaluationCriteria String?
+  status          TaskStatus @default(DRAFT)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  trainer Trainer @relation(fields: [trainerId], references: [id])
+  module  Module? @relation(fields: [moduleId], references: [id])
+
+  submissions PracticalSubmission[]
+
+  @@index([trainerId])
+  @@index([moduleId])
+  @@map("practical_tasks")
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  REVISION_REQUIRED
+  APPROVED
+  REJECTED
+}
+
+model PracticalSubmission {
+  id          String           @id @default(uuid())
+  taskId      String
+  traineeId   String
+  description String?
+  fileUrls    String?          // JSON array of file URLs
+  submittedAt DateTime         @default(now())
+  status      SubmissionStatus @default(SUBMITTED)
+  feedback    String?
+  score       Float?
+  maxScore    Float?
+  reviewedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  task    PracticalTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  trainee Trainee       @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, traineeId])
+  @@index([taskId])
+  @@index([traineeId])
+  @@map("practical_submissions")
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+
+enum ProductStatus {
+  IDEA
+  DESIGN
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_REVIEW
+  REVISION_REQUIRED
+  APPROVED
+  COMPLETED
+}
+
+model Product {
+  id              String        @id @default(uuid())
+  traineeId       String
+  batchId         String?
+  name            String
+  category        String?
+  description     String?
+  materials       String?
+  productionDate  DateTime?
+  submissionDate  DateTime?
+  imageUrls       String?       // JSON array
+  documentUrls    String?       // JSON array
+  status          ProductStatus @default(IDEA)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  trainee Trainee        @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  batch   TrainingBatch? @relation(fields: [batchId], references: [id])
+
+  productSkills  ProductSkill[]
+  productReviews ProductReview[]
+  statusHistory  ProductStatusHistory[]
+
+  @@index([traineeId])
+  @@index([batchId])
+  @@index([status])
+  @@map("products")
+}
+
+model ProductSkill {
+  id        String @id @default(uuid())
+  productId String
+  skillId   String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, skillId])
+  @@map("product_skills")
+}
+
+model ProductReview {
+  id         String   @id @default(uuid())
+  productId  String
+  trainerId  String
+  criteria   String?  // JSON: { criterion: string, score: number, weight: number, comment: string }[]
+  overallScore Float?
+  maxScore   Float?
+  feedback   String?
+  recommendation String?
+  reviewedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  trainer Trainer @relation(fields: [trainerId], references: [id])
+
+  @@index([productId])
+  @@index([trainerId])
+  @@map("product_reviews")
+}
+
+model ProductStatusHistory {
+  id        String        @id @default(uuid())
+  productId String
+  fromStatus ProductStatus?
+  toStatus  ProductStatus
+  changedBy String?
+  remarks   String?
+  createdAt DateTime      @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_status_history")
+}
+
+// ============================================================
+// ASSESSMENTS
+// ============================================================
+
+enum AssessmentType {
+  THEORY
+  PRACTICAL
+  PRODUCT
+  PROJECT
+  FINAL
+}
+
+enum AssessmentResult {
+  PASS
+  FAIL
+  MERIT
+  DISTINCTION
+  PENDING
+}
+
+model Assessment {
+  id          String           @id @default(uuid())
+  traineeId   String
+  trainerId   String
+  batchId     String?
+  type        AssessmentType
+  title       String
+  description String?
+  score       Float?
+  maxScore    Float            @default(100)
+  result      AssessmentResult @default(PENDING)
+  feedback    String?
+  evidenceUrl String?
+  assessedAt  DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  trainee Trainee @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  trainer Trainer @relation(fields: [trainerId], references: [id])
+
+  assessmentSkills AssessmentSkill[]
+
+  @@index([traineeId])
+  @@index([trainerId])
+  @@index([type])
+  @@map("assessments")
+}
+
+model AssessmentSkill {
+  id           String @id @default(uuid())
+  assessmentId String
+  skillId      String
+  score        Float?
+  maxScore     Float?
+  feedback     String?
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, skillId])
+  @@map("assessment_skills")
+}
+
+// ============================================================
+// EVALUATION CRITERIA (configurable per elective)
+// ============================================================
+
+model EvaluationCriteria {
+  id          String @id @default(uuid())
+  electiveId  String?
+  name        String
+  description String?
+  weight      Float  @default(1)
+  maxScore    Float  @default(10)
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([electiveId])
+  @@map("evaluation_criteria")
+}
+
+// ============================================================
+// COMPLETION RULES (Certificate Eligibility Engine)
+// ============================================================
+
+enum CompletionRuleType {
+  MIN_ATTENDANCE_PCT
+  MIN_TRAINING_HOURS
+  MODULES_COMPLETED
+  SKILLS_VERIFIED
+  PRACTICAL_ASSESSMENT_PASSED
+  PRODUCT_APPROVED
+  TRAINER_RECOMMENDATION
+  ADMIN_APPROVAL
+}
+
+model CompletionRule {
+  id          String             @id @default(uuid())
+  electiveId  String
+  ruleType    CompletionRuleType
+  ruleValue   String             // e.g., "80" for 80%
+  description String?
+  isRequired  Boolean            @default(true)
+  sortOrder   Int                @default(0)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  elective VocationalElective @relation(fields: [electiveId], references: [id], onDelete: Cascade)
+
+  @@index([electiveId])
+  @@map("completion_rules")
+}
+
+// ============================================================
+// CERTIFICATES
+// ============================================================
+
+enum CertificateStatus {
+  DRAFT
+  ISSUED
+  REVOKED
+  EXPIRED
+}
+
+model Certificate {
+  id              String            @id @default(uuid())
+  traineeId       String
+  electiveId      String?
+  certificateNo   String            @unique
+  title           String
+  description     String?
+  trainingPeriod  String?
+  trainingHours   Int?
+  skillsSummary   String?           // JSON array of verified skills
+  issueDate       DateTime          @default(now())
+  expiryDate      DateTime?
+  status          CertificateStatus @default(DRAFT)
+  issuedById      String?
+  signatory       String?
+  qrCode          String?
+  pdfUrl          String?
+  revokedAt       DateTime?
+  revokedReason   String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  trainee  Trainee @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  issuedBy User?   @relation("IssuedByUser", fields: [issuedById], references: [id])
+
+  @@index([traineeId])
+  @@index([certificateNo])
+  @@index([status])
+  @@map("certificates")
+}
+
+// ============================================================
+// FILE MANAGEMENT
+// ============================================================
+
+model FileUpload {
+  id           String   @id @default(uuid())
+  originalName String
+  storedName   String
+  mimeType     String
+  size         Int
+  path         String
+  bucket       String?
+  uploadedById String?
+  entityType   String?  // e.g., 'trainee_photo', 'product_image'
+  entityId     String?
+  isPublic     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([uploadedById])
+  @@map("file_uploads")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+enum NotificationType {
+  SCHEDULE_UPDATE
+  ATTENDANCE_WARNING
+  ASSIGNMENT_DEADLINE
+  PRODUCT_REVIEW
+  ASSESSMENT_RESULT
+  SKILL_VERIFICATION
+  CERTIFICATE_AVAILABLE
+  GENERAL
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  type        NotificationType @default(GENERAL)
+  title       String
+  message     String
+  data        String?          // JSON payload
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entity     String
+  entityId   String?
+  oldValues  String?  // JSON
+  newValues  String?  // JSON
+  ipAddress  String?
+  userAgent  String?
+  requestId  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

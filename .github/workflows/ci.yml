@@ -1,0 +1,118 @@
+name: KISS V-TRACK CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck --if-present --workspaces
+      - run: npm run lint --if-present --workspaces
+
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test --if-present --workspaces
+        env:
+          NODE_ENV: test
+
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kiss_vtrack_test
+          POSTGRES_USER: kiss_user
+          POSTGRES_PASSWORD: kiss_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
+      - run: npm run test:integration --if-present
+        env:
+          DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
+          JWT_SECRET: test-jwt-secret-32-chars-minimum-ok
+          NODE_ENV: test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
+      - name: Upload API artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-build
+          path: apps/api/dist
+      - name: Upload Web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: apps/web/dist
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker images
+        run: docker compose build
+      - name: Run health checks
+        run: |
+          docker compose up -d postgres
+          sleep 10
+          docker compose up -d api
+          sleep 5
+          curl --fail http://localhost:3000/health || exit 1
+          docker compose down

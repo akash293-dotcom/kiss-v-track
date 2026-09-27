@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KISS V-TRACK</string>
+    <string name="title_activity_main">KISS V-TRACK</string>
+    <string name="package_name">in.ac.kiss.vtrack</string>
+    <string name="custom_url_scheme">in.ac.kiss.vtrack</string>
+</resources>

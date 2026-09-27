@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+*.env.local
+uploads/
+coverage/
+.prisma/
+*.log
+.DS_Store
+Thumbs.db
+
+tsconfig.tsbuildinfo
