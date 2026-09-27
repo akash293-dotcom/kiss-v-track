@@ -143,3 +143,136 @@ export const getAdminDashboard = async (campusId?: string) => {
     trainingTrends: [],
   };
 };
+
+export const getTrainerDashboard = async (trainerId: string) => {
+  const [trainer, activeBatches, upcomingSessions, completedSessions] =
+    await Promise.all([
+      prisma.trainer.findUnique({
+        where: { id: trainerId },
+        select: {
+          id: true,
+          employeeId: true,
+          qualification: true,
+          specialization: true,
+          experience: true,
+          isActive: true,
+        },
+      }),
+
+      prisma.trainingBatch.count({
+        where: {
+          trainerId,
+          status: 'ACTIVE',
+        },
+      }),
+
+      prisma.trainingSession.count({
+        where: {
+          trainerId,
+          status: 'SCHEDULED',
+          date: {
+            gte: new Date(),
+          },
+        },
+      }),
+
+      prisma.trainingSession.count({
+        where: {
+          trainerId,
+          status: 'COMPLETED',
+        },
+      }),
+    ]);
+
+  return {
+    trainer,
+    activeBatches,
+    upcomingSessions,
+    completedSessions,
+  };
+};
+
+export const getTraineeDashboard = async (traineeId: string) => {
+  const [trainee, activeEnrollments, skills, attendance] =
+    await Promise.all([
+      prisma.trainee.findUnique({
+        where: { id: traineeId },
+        select: {
+          id: true,
+          studentId: true,
+          className: true,
+          academicYear: true,
+          department: true,
+          enrollmentStatus: true,
+        },
+      }),
+
+      prisma.enrollment.count({
+        where: {
+          traineeId,
+          status: 'ACTIVE',
+        },
+      }),
+
+      prisma.traineeSkill.findMany({
+        where: {
+          traineeId,
+        },
+        select: {
+          status: true,
+          progressPct: true,
+        },
+      }),
+
+      prisma.attendance.findMany({
+        where: {
+          traineeId,
+        },
+        select: {
+          status: true,
+        },
+      }),
+    ]);
+
+  const presentCount = attendance.filter(
+    (record) =>
+      record.status === 'PRESENT' ||
+      record.status === 'LATE'
+  ).length;
+
+  const attendancePercentage =
+    attendance.length > 0
+      ? Math.round(
+          (presentCount / attendance.length) * 1000
+        ) / 10
+      : 0;
+
+  const skillsLearned = skills.filter(
+    (skill) => skill.status !== 'NOT_STARTED'
+  ).length;
+
+  const skillsVerified = skills.filter(
+    (skill) => skill.status === 'VERIFIED'
+  ).length;
+
+  const averageSkillProgress =
+    skills.length > 0
+      ? Math.round(
+          (skills.reduce(
+            (sum, skill) => sum + skill.progressPct,
+            0
+          ) /
+            skills.length) *
+            10
+        ) / 10
+      : 0;
+
+  return {
+    trainee,
+    activeEnrollments,
+    attendancePercentage,
+    skillsLearned,
+    skillsVerified,
+    averageSkillProgress,
+  };
+};
