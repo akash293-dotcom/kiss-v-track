@@ -40,6 +40,53 @@ const COLORS = [
   '#6366F1',
 ];
 
+function CustomTooltip({ active, payload }: any) {
+  if (!active || !payload || !payload.length) {
+    return null;
+  }
+
+  const item = payload[0];
+
+  return (
+    <div
+      style={{
+        background: 'rgba(255, 255, 255, 0.72)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.85)',
+        borderRadius: '16px',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.12)',
+        padding: '16px 22px 16px 20px',
+        minWidth: '300px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '14px',
+      }}
+    >
+      <div
+        style={{
+          width: '7px',
+          height: '42px',
+          borderRadius: '999px',
+          background: '#F59E0B',
+          flexShrink: 0,
+        }}
+      />
+
+      <div
+        style={{
+          fontSize: '18px',
+          fontWeight: 500,
+          color: '#111827',
+        }}
+      >
+        {item.name} : {item.value}{' '}
+        {item.value === 1 ? 'program' : 'programs'}
+      </div>
+    </div>
+  );
+}
+
 function StatCard({
   title,
   value,
@@ -270,21 +317,10 @@ export default function AdminDashboard() {
 
                 </Pie>
 
-                {/* Appears ONLY when cursor is over a slice */}
                 <Tooltip
-                  formatter={(
-                    value: number,
-                    name: string
-                  ) => [
-                    `${value} program${
-                      value === 1 ? '' : 's'
-                    }`,
-                    name,
-                  ]}
+                  content={<CustomTooltip />}
                 />
 
-                {/* Category names stay here instead of
-                    being drawn over the donut */}
                 <Legend
                   verticalAlign="bottom"
                   height={75}
