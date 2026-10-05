@@ -47,9 +47,22 @@ function CustomTooltip({ active, payload }: any) {
 
   const item = payload[0];
 
+  const name =
+    item.payload?.label ||
+    item.payload?.name ||
+    item.name ||
+    'Value';
+
+  const value = item.value;
+
   const isSkill =
-    item.name === 'Skills Learned' ||
-    item.name === 'Skills Verified';
+    name === 'Skills Learned' ||
+    name === 'Skills Verified';
+
+  const itemColor =
+    item.color ||
+    item.payload?.fill ||
+    '#4F46E5';
 
   return (
     <div
@@ -72,7 +85,7 @@ function CustomTooltip({ active, payload }: any) {
           width: '7px',
           height: '42px',
           borderRadius: '999px',
-          background: '#F59E0B',
+          background: itemColor,
           flexShrink: 0,
         }}
       />
@@ -84,12 +97,12 @@ function CustomTooltip({ active, payload }: any) {
           color: '#111827',
         }}
       >
-        {item.name} : {item.value}{' '}
+        {name} : {value}{' '}
         {isSkill
-          ? item.value === 1
+          ? value === 1
             ? 'skill'
             : 'skills'
-          : item.value === 1
+          : value === 1
             ? 'program'
             : 'programs'}
       </div>
