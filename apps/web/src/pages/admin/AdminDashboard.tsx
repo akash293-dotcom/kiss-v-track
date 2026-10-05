@@ -47,6 +47,10 @@ function CustomTooltip({ active, payload }: any) {
 
   const item = payload[0];
 
+  const isSkill =
+    item.name === 'Skills Learned' ||
+    item.name === 'Skills Verified';
+
   return (
     <div
       style={{
@@ -81,7 +85,13 @@ function CustomTooltip({ active, payload }: any) {
         }}
       >
         {item.name} : {item.value}{' '}
-        {item.value === 1 ? 'program' : 'programs'}
+        {isSkill
+          ? item.value === 1
+            ? 'skill'
+            : 'skills'
+          : item.value === 1
+            ? 'program'
+            : 'programs'}
       </div>
     </div>
   );
@@ -368,7 +378,9 @@ export default function AdminDashboard() {
                   allowDecimals={false}
                 />
 
-                <Tooltip />
+                <Tooltip
+                  content={<CustomTooltip />}
+                />
 
                 <Bar
                   dataKey="value"
