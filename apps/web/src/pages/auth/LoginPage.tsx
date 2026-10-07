@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Mail,
   Lock,
@@ -20,6 +20,17 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const passwordSectionRef = useRef<HTMLDivElement>(null);
+
+  const handleEmailFocus = () => {
+    setTimeout(() => {
+      passwordSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 150);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,6 +225,7 @@ export default function LoginPage() {
                   placeholder="Enter your email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onFocus={handleEmailFocus}
                   autoComplete="email"
                   required
                 />
@@ -222,7 +234,10 @@ export default function LoginPage() {
 
             </div>
 
-            <div className="form-group">
+            <div
+              className="form-group"
+              ref={passwordSectionRef}
+            >
 
               <label>
                 Password
