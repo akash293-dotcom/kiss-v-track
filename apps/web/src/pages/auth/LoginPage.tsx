@@ -1,78 +1,349 @@
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useAuth } from '../../hooks/useAuth';
-import api from '../../lib/api';
-import toast from 'react-hot-toast';
-import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
-
-const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+import { useState } from "react";
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  BookOpen,
+  BarChart3,
+  Lightbulb,
+  Users,
+  ArrowRight,
+  UserCog,
+} from "lucide-react";
+import api from "../../lib/api";
+import "./LoginPage.css";
 
 export default function LoginPage() {
-  const { login } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema)
-  });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const onSubmit = async (data: LoginForm) => {
+    if (!email || !password) {
+      alert("Please enter your email and password.");
+      return;
+    }
+
     try {
-      setIsLoading(true);
-      const res = await api.post('/auth/login', data);
-      const { token, user } = res.data.data;
-      login(token, user);
-      toast.success('Login successful');
+      setLoading(true);
+
+      const response = await api.post("/auth/login", {
+        email,
+        password,
+      });
+
+      const data = response.data?.data;
+
+      if (!data?.token || !data?.user) {
+        alert("Login failed: invalid server response.");
+        return;
+      }
+
+      localStorage.setItem("token", data.token);
+
+      if (remember) {
+        localStorage.setItem("rememberLogin", "true");
+      } else {
+        localStorage.removeItem("rememberLogin");
+      }
+
+      window.location.href = "/";
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Login failed');
+      console.error("Login error:", error);
+
+      alert(
+        error?.response?.data?.message ||
+        error?.response?.data?.error?.message ||
+        "Login failed. Please check your email and password."
+      );
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
+  const handleForgotPassword = () => {
+    alert("Please contact your administrator to reset your password.");
+  };
+
+  const handleAdminContact = () => {
+    alert("Please contact your KISS V-TRACK administrator.");
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
-          KISS V-TRACK
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Learn. Practice. Create. Get Skilled.
-        </p>
+    <div className="login-page">
+
+      <div className="bg-circle circle-1"></div>
+      <div className="bg-circle circle-2"></div>
+      <div className="bg-circle circle-3"></div>
+
+      <div className="bg-dots"></div>
+
+      <div className="curve curve-left"></div>
+      <div className="curve curve-bottom"></div>
+
+      <div className="floating-note note-left">
+        <BarChart3 size={26} />
+        <span>
+          Track your progress.
+          <br />
+          Grow everyday!
+        </span>
+
+        <div className="note-arrow">↗</div>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
-            <Input
-              label="Email address"
-              type="email"
-              {...register('email')}
-              error={errors.email?.message}
-            />
+      <div className="floating-note note-right">
+        <Lightbulb size={24} />
 
-            <Input
-              label="Password"
-              type="password"
-              {...register('password')}
-              error={errors.password?.message}
-            />
+        <span>
+          Skills today
+          <br />
+          Better tomorrow
+        </span>
 
-            <div>
-              <Button type="submit" className="w-full" isLoading={isLoading}>
-                Sign in
-              </Button>
-            </div>
-          </form>
+        <div className="note-line"></div>
+      </div>
+
+      <div className="paper-plane">
+        ➤
+      </div>
+
+      <main className="login-container">
+
+        <div className="brand-section">
+
+          <div className="cap-icon">
+            🎓
+          </div>
+
+          <h1>
+            KISS <span>V-TRACK</span>
+          </h1>
+
+          <p>
+            Learn. Practice. Create. Get Skilled.
+          </p>
+
         </div>
-      </div>
+
+        <div className="features">
+
+          <div className="feature">
+            <div className="feature-icon blue">
+              <BookOpen size={26} />
+            </div>
+
+            <strong>Learn</strong>
+
+            <small>
+              Access resources
+            </small>
+          </div>
+
+          <div className="feature">
+            <div className="feature-icon green">
+              <BarChart3 size={26} />
+            </div>
+
+            <strong>Practice</strong>
+
+            <small>
+              Track progress
+            </small>
+          </div>
+
+          <div className="feature">
+            <div className="feature-icon yellow">
+              <Lightbulb size={26} />
+            </div>
+
+            <strong>Create</strong>
+
+            <small>
+              Build your skills
+            </small>
+          </div>
+
+          <div className="feature">
+            <div className="feature-icon pink">
+              <Users size={26} />
+            </div>
+
+            <strong>Get Skilled</strong>
+
+            <small>
+              Be future ready
+            </small>
+          </div>
+
+        </div>
+
+        <div className="login-card">
+
+          <div className="welcome">
+
+            <h2>
+              Welcome back!
+            </h2>
+
+            <p>
+              Sign in to continue to KISS V-TRACK
+            </p>
+
+          </div>
+
+          <form onSubmit={handleSubmit}>
+
+            <div className="form-group">
+
+              <label>
+                Email address
+              </label>
+
+              <div className="input-wrapper">
+
+                <Mail size={23} />
+
+                <input
+                  type="email"
+                  placeholder="Enter your email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  required
+                />
+
+              </div>
+
+            </div>
+
+            <div className="form-group">
+
+              <label>
+                Password
+              </label>
+
+              <div className="input-wrapper">
+
+                <Lock size={23} />
+
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() =>
+                    setShowPassword(!showPassword)
+                  }
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  {showPassword ? (
+                    <EyeOff size={22} />
+                  ) : (
+                    <Eye size={22} />
+                  )}
+                </button>
+
+              </div>
+
+            </div>
+
+            <div className="options">
+
+              <label className="remember">
+
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) =>
+                    setRemember(e.target.checked)
+                  }
+                />
+
+                <span className="custom-checkbox">
+                  {remember ? "✓" : ""}
+                </span>
+
+                <span>
+                  Keep me signed in
+                </span>
+
+              </label>
+
+              <button
+                type="button"
+                className="forgot"
+                onClick={handleForgotPassword}
+              >
+                Forgot password?
+              </button>
+
+            </div>
+
+            <button
+              type="submit"
+              className="sign-in-button"
+              disabled={loading}
+            >
+
+              <span>
+                {loading ? "Signing in..." : "Sign in"}
+              </span>
+
+              {!loading && (
+                <ArrowRight size={25} />
+              )}
+
+            </button>
+
+          </form>
+
+          <div className="divider">
+
+            <span></span>
+
+            <p>
+              or
+            </p>
+
+            <span></span>
+
+          </div>
+
+          <button
+            type="button"
+            className="admin-button"
+            onClick={handleAdminContact}
+          >
+
+            <UserCog size={23} />
+
+            <span>
+              Contact your administrator
+            </span>
+
+          </button>
+
+        </div>
+
+      </main>
+
     </div>
   );
 }
