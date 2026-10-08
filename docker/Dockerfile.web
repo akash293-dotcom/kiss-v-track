@@ -12,7 +12,7 @@ RUN npm ci --workspace=apps/web --workspace=packages/shared
 COPY packages/shared/ ./packages/shared/
 COPY apps/web/ ./apps/web/
 
-ARG VITE_API_URL=http://localhost:3000/api/v1
+ARG VITE_API_URL=http://localhost:5000/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build --workspace=apps/web
