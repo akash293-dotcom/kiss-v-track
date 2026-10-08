@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Eye, Edit } from 'lucide-react';
 import { Table } from '../../components/ui/Table';
 import { Button } from '../../components/ui/Button';
@@ -9,46 +9,99 @@ import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Avatar } from '../../components/ui/Avatar';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Pagination } from '../../components/ui/Pagination';
+import api from '../../lib/api';
 
 export default function TraineeList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery({
+  const navigate = useNavigate();
+
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['trainees', searchTerm, page],
     queryFn: async () => {
-      // Mock data
-      const items = Array.from({ length: 10 }).map((_, i) => ({
-        id: `TRN${i}`,
-        firstName: `Trainee ${i}`,
-        lastName: 'Student',
-        email: `trainee${i}@example.com`,
-        studentId: `STU00${i}`,
-        campus: 'Main Campus',
-        status: 'ACTIVE'
-      }));
-      return { data: items, meta: { total: 50, page, lastPage: 5 } };
+      const response = await api.get('/trainees', {
+        params: {
+          search: searchTerm || undefined,
+          page,
+          limit: 10
+        }
+      });
+
+      return response.data?.data || {
+        total: 0,
+        page: 1,
+        limit: 10,
+        trainees: []
+      };
     }
   });
+
+  const trainees = data?.trainees || [];
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    setPage(1);
+  };
+
+  const getStatus = (trainee: any) => {
+    if (trainee.enrollmentStatus) {
+      return trainee.enrollmentStatus;
+    }
+
+    if (trainee.status) {
+      return trainee.status;
+    }
+
+    if (trainee.user?.isActive === false) {
+      return 'INACTIVE';
+    }
+
+    return 'ACTIVE';
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Trainees</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Trainees
+          </h1>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Manage trainees
+          </p>
         </div>
-        <Link to="/admin/trainees/new">
-          <Button icon={<Plus size={16} />}>Add Trainee</Button>
-        </Link>
+
+        <Button
+          icon={<Plus size={16} />}
+          onClick={() => navigate('/admin/trainees/new')}
+        >
+          Add Trainee
+        </Button>
       </div>
 
       <div className="bg-white shadow rounded-lg p-6">
         <div className="mb-6 w-full max-w-md">
-          <SearchInput onSearch={setSearchTerm} placeholder="Search trainees..." />
+          <SearchInput
+            onSearch={handleSearch}
+            placeholder="Search trainees..."
+          />
         </div>
 
         {isLoading ? (
-          <div className="py-12 flex justify-center"><LoadingSpinner /></div>
+          <div className="py-12 flex justify-center">
+            <LoadingSpinner />
+          </div>
+        ) : isError ? (
+          <div className="py-12 text-center text-red-600">
+            Failed to load trainees.
+
+            <div className="text-sm mt-2">
+              {(error as any)?.response?.data?.message ||
+                'Please try again.'}
+            </div>
+          </div>
         ) : (
           <>
             <Table>
@@ -61,39 +114,103 @@ export default function TraineeList() {
                   <Table.Head>Actions</Table.Head>
                 </Table.Row>
               </Table.Header>
+
               <Table.Body>
-                {data?.data.map((trainee) => (
-                  <Table.Row key={trainee.id}>
-                    <Table.Cell>
-                      <div className="flex items-center">
-                        <Avatar name={`${trainee.firstName} ${trainee.lastName}`} />
-                        <div className="ml-3">
-                          <p className="text-sm font-medium text-gray-900">{trainee.firstName} {trainee.lastName}</p>
-                          <p className="text-sm text-gray-500">{trainee.email}</p>
-                        </div>
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell>{trainee.studentId}</Table.Cell>
-                    <Table.Cell>{trainee.campus}</Table.Cell>
-                    <Table.Cell><StatusBadge status={trainee.status} /></Table.Cell>
-                    <Table.Cell>
-                      <div className="flex space-x-2">
-                        <Link to={`/admin/trainees/${trainee.id}`}>
-                          <Button variant="ghost" size="sm" className="text-indigo-600"><Eye size={16} /></Button>
-                        </Link>
-                        <Button variant="ghost" size="sm" className="text-gray-600"><Edit size={16} /></Button>
+                {trainees.length > 0 ? (
+                  trainees.map((trainee: any) => {
+                    const fullName = `${trainee.user?.firstName || ''} ${trainee.user?.lastName || ''}`.trim();
+
+                    return (
+                      <Table.Row key={trainee.id}>
+                        <Table.Cell>
+                          <div className="flex items-center">
+                            <Avatar name={fullName || 'Trainee'} />
+
+                            <div className="ml-3">
+                              <p className="text-sm font-medium text-gray-900">
+                                {fullName || 'Unnamed Trainee'}
+                              </p>
+
+                              <p className="text-sm text-gray-500">
+                                {trainee.user?.email || '-'}
+                              </p>
+                            </div>
+                          </div>
+                        </Table.Cell>
+
+                        <Table.Cell>
+                          {trainee.studentId || '-'}
+                        </Table.Cell>
+
+                        <Table.Cell>
+                          {trainee.campus?.name || '-'}
+                        </Table.Cell>
+
+                        <Table.Cell>
+                          <StatusBadge
+                            status={getStatus(trainee)}
+                          />
+                        </Table.Cell>
+
+                        <Table.Cell>
+                          <div className="flex space-x-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-indigo-600"
+                              onClick={() =>
+                                navigate(
+                                  `/admin/trainees/${trainee.id}`
+                                )
+                              }
+                              aria-label={`View ${fullName}`}
+                            >
+                              <Eye size={16} />
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-gray-600"
+                              onClick={() =>
+                                navigate(
+                                  `/admin/trainees/${trainee.id}/edit`
+                                )
+                              }
+                              aria-label={`Edit ${fullName}`}
+                            >
+                              <Edit size={16} />
+                            </Button>
+                          </div>
+                        </Table.Cell>
+                      </Table.Row>
+                    );
+                  })
+                ) : (
+                  <Table.Row>
+                    <Table.Cell colSpan={5}>
+                      <div className="py-10 text-center text-gray-500">
+                        No trainees found.
                       </div>
                     </Table.Cell>
                   </Table.Row>
-                ))}
+                )}
               </Table.Body>
             </Table>
-            <Pagination 
-              currentPage={page} 
-              totalPages={data?.meta.lastPage || 1} 
-              onPageChange={setPage} 
-              totalItems={data?.meta.total}
-              itemsPerPage={10}
+
+            <Pagination
+              currentPage={data?.page || page}
+              totalPages={
+                Math.ceil(
+                  (data?.total || 0) /
+                  (data?.limit || 10)
+                ) || 1
+              }
+              onPageChange={setPage}
+              totalItems={data?.total || 0}
+              itemsPerPage={data?.limit || 10}
             />
           </>
         )}
