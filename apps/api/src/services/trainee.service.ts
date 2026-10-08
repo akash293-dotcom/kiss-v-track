@@ -308,9 +308,6 @@ export const getCertificates = async (id: string) => {
     where: {
       traineeId: id,
     },
-    orderBy: {
-      issuedAt: 'desc',
-    },
   });
 };
 
