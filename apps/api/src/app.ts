@@ -12,6 +12,9 @@ import { NotFoundError } from './lib/errors';
 
 const app: Express = express();
 
+// Trust Railway's reverse proxy so rate limiting can safely use X-Forwarded-For.
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 app.use(cors({
