@@ -1,86 +1,296 @@
+import { AttendanceStatus, UserRole } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../lib/errors';
 
-export const list = async (query: any) => {
-  const { sessionId } = query;
-  if (!sessionId) throw new AppError('sessionId is required', 400);
+const validStatuses = new Set<string>(Object.values(AttendanceStatus));
 
-  return prisma.attendance.findMany({
-    where: { sessionId },
+const normalizeDay = (value?: string) => {
+  if (!value) return undefined;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    throw new AppError(`Invalid date: ${value}`, 400);
+  }
+  return date;
+};
+
+const getDayRange = (from?: string, to?: string) => {
+  const start = normalizeDay(from);
+  const end = normalizeDay(to);
+
+  if (!start && !end) return undefined;
+
+  if (start && end && start > end) {
+    throw new AppError('From date cannot be after To date', 400);
+  }
+
+  const range: { gte?: Date; lt?: Date } = {};
+  if (start) range.gte = start;
+  if (end) {
+    const nextDay = new Date(end);
+    nextDay.setDate(nextDay.getDate() + 1);
+    range.lt = nextDay;
+  }
+  return range;
+};
+
+export const listSessions = async (query: any, user: { id: string; role: UserRole; campusId?: string | null }) => {
+  const { batchId, from, to, search } = query;
+  const where: any = {};
+
+  if (batchId) where.batchId = batchId;
+
+  const dateRange = getDayRange(from, to);
+  if (dateRange) where.date = dateRange;
+
+  if (search) {
+    where.OR = [
+      { topic: { contains: String(search), mode: 'insensitive' } },
+      { description: { contains: String(search), mode: 'insensitive' } },
+      { batch: { name: { contains: String(search), mode: 'insensitive' } } },
+      { batch: { code: { contains: String(search), mode: 'insensitive' } } },
+    ];
+  }
+
+  if (user.role === UserRole.TRAINER) {
+    where.trainer = { userId: user.id };
+  } else if (user.role === UserRole.CENTRE_ADMIN) {
+    if (!user.campusId) return [];
+    where.batch = { ...(where.batch || {}), campusId: user.campusId };
+  } else if (user.role === UserRole.TRAINEE) {
+    where.batch = {
+      ...(where.batch || {}),
+      enrollments: { some: { trainee: { userId: user.id } } },
+    };
+  }
+
+  return prisma.trainingSession.findMany({
+    where,
     include: {
-      trainee: { include: { user: { select: { firstName: true, lastName: true, email: true } } } }
-    }
+      batch: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          campusId: true,
+          _count: { select: { enrollments: true } },
+        },
+      },
+      trainer: { include: { user: { select: { firstName: true, lastName: true } } } },
+      module: { select: { id: true, name: true } },
+      _count: { select: { attendances: true } },
+    },
+    orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
   });
 };
 
-export const markBulk = async (sessionId: string, records: { traineeId: string, status: any, remarks?: string }[], markedById: string, trainerId?: string) => {
-  const session = await prisma.trainingSession.findUnique({ where: { id: sessionId } });
+export const getSessionAttendance = async (sessionId: string) => {
+  const session = await prisma.trainingSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      batch: { select: { id: true, name: true, code: true, campusId: true } },
+      trainer: { include: { user: { select: { firstName: true, lastName: true } } } },
+      module: { select: { id: true, name: true } },
+    },
+  });
+
   if (!session) throw new AppError('Session not found', 404);
 
-  return prisma.$transaction(async (tx) => {
-    const results = [];
-    for (const record of records) {
-      const existing = await tx.attendance.findUnique({
-        where: { traineeId_sessionId: { traineeId: record.traineeId, sessionId } }
-      });
+  const [enrollments, attendances] = await Promise.all([
+    prisma.enrollment.findMany({
+      where: { batchId: session.batchId, status: 'ACTIVE' },
+      include: {
+        trainee: {
+          include: {
+            user: { select: { firstName: true, lastName: true, email: true, phone: true } },
+            campus: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { trainee: { studentId: 'asc' } },
+    }),
+    prisma.attendance.findMany({
+      where: { sessionId },
+      include: {
+        trainee: {
+          include: {
+            user: { select: { firstName: true, lastName: true, email: true, phone: true } },
+            campus: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { trainee: { studentId: 'asc' } },
+    }),
+  ]);
 
-      if (existing) {
-        const updated = await tx.attendance.update({
-          where: { id: existing.id },
-          data: {
-            status: record.status,
-            remarks: record.remarks,
-            markedById,
-            trainerId
-          }
-        });
-        results.push(updated);
-      } else {
-        const created = await tx.attendance.create({
-          data: {
-            sessionId,
-            traineeId: record.traineeId,
-            status: record.status,
-            remarks: record.remarks,
-            markedById,
-            trainerId
-          }
-        });
-        results.push(created);
-      }
-    }
-    
-    // Update session status to COMPLETED
-    if (session.status !== 'COMPLETED') {
-      await tx.trainingSession.update({ where: { id: sessionId }, data: { status: 'COMPLETED' } });
-    }
-    
-    return results;
+  const attendanceByTrainee = new Map(attendances.map((item) => [item.traineeId, item]));
+  const enrolledIds = new Set(enrollments.map((item) => item.traineeId));
+
+  const records = enrollments.map((enrollment) => {
+    const attendance = attendanceByTrainee.get(enrollment.traineeId);
+    return {
+      attendanceId: attendance?.id ?? null,
+      traineeId: enrollment.traineeId,
+      studentId: enrollment.trainee.studentId,
+      trainee: enrollment.trainee,
+      status: attendance?.status ?? null,
+      remarks: attendance?.remarks ?? '',
+      markedAt: attendance?.markedAt ?? null,
+      isMarked: Boolean(attendance),
+    };
   });
+
+  // Keep historical attendance visible even when a trainee is no longer actively enrolled.
+  for (const attendance of attendances) {
+    if (!enrolledIds.has(attendance.traineeId)) {
+      records.push({
+        attendanceId: attendance.id,
+        traineeId: attendance.traineeId,
+        studentId: attendance.trainee.studentId,
+        trainee: attendance.trainee,
+        status: attendance.status,
+        remarks: attendance.remarks ?? '',
+        markedAt: attendance.markedAt,
+        isMarked: true,
+      });
+    }
+  }
+
+  const counts = records.reduce(
+    (acc, item) => {
+      if (item.status) acc[item.status] += 1;
+      else acc.PENDING += 1;
+      return acc;
+    },
+    { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0, PENDING: 0 } as Record<string, number>,
+  );
+
+  return {
+    session,
+    records,
+    summary: {
+      total: records.length,
+      ...counts,
+      marked: records.length - counts.PENDING,
+      attendancePct: records.length > 0 ? ((counts.PRESENT + counts.LATE) / records.length) * 100 : 0,
+    },
+  };
 };
 
-export const getSummary = async (query: { traineeId: string, batchId: string }) => {
+export const markBulk = async (
+  sessionId: string,
+  records: { traineeId: string; status: AttendanceStatus; remarks?: string }[],
+  markedById: string,
+  markerRole: UserRole,
+) => {
+  if (!sessionId || !Array.isArray(records) || records.length === 0) {
+    throw new AppError('sessionId and at least one attendance record are required', 400);
+  }
+
+  const session = await prisma.trainingSession.findUnique({
+    where: { id: sessionId },
+    select: { id: true, trainerId: true, batchId: true },
+  });
+
+  if (!session) throw new AppError('Session not found', 404);
+
+  const uniqueRecords = new Map<string, { traineeId: string; status: AttendanceStatus; remarks?: string }>();
+  for (const record of records) {
+    if (!record?.traineeId || !validStatuses.has(record.status)) {
+      throw new AppError('Every attendance record must contain a valid traineeId and status', 400);
+    }
+    uniqueRecords.set(record.traineeId, record);
+  }
+
+  const traineeIds = [...uniqueRecords.keys()];
+  const enrollments = await prisma.enrollment.findMany({
+    where: {
+      batchId: session.batchId,
+      traineeId: { in: traineeIds },
+      status: 'ACTIVE',
+    },
+    select: { traineeId: true },
+  });
+
+  const allowedIds = new Set(enrollments.map((item) => item.traineeId));
+  const invalidIds = traineeIds.filter((id) => !allowedIds.has(id));
+  if (invalidIds.length > 0) {
+    throw new AppError('Attendance can only be marked for trainees actively enrolled in this session batch', 400);
+  }
+
+  let markerTrainerId: string | undefined;
+  if (markerRole === UserRole.TRAINER) {
+    const trainer = await prisma.trainer.findUnique({ where: { userId: markedById }, select: { id: true } });
+    if (!trainer) throw new AppError('Trainer profile not found', 403);
+    markerTrainerId = trainer.id;
+  }
+
+  const saved = await prisma.$transaction(async (tx) => {
+    const results = [];
+
+    for (const record of uniqueRecords.values()) {
+      const result = await tx.attendance.upsert({
+        where: { traineeId_sessionId: { traineeId: record.traineeId, sessionId } },
+        create: {
+          traineeId: record.traineeId,
+          sessionId,
+          trainerId: markerTrainerId ?? session.trainerId,
+          markedById,
+          status: record.status,
+          remarks: record.remarks || undefined,
+        },
+        update: {
+          trainerId: markerTrainerId ?? session.trainerId,
+          markedById,
+          status: record.status,
+          remarks: record.remarks ?? '',
+          markedAt: new Date(),
+        },
+      });
+      results.push(result);
+    }
+
+    return results;
+  });
+
+  return saved;
+};
+
+export const getSummary = async (query: { traineeId: string; batchId: string }) => {
   const { traineeId, batchId } = query;
   if (!traineeId || !batchId) throw new AppError('traineeId and batchId are required', 400);
 
   const attendances = await prisma.attendance.findMany({
     where: { traineeId, session: { batchId } },
-    include: { session: true }
+    include: { session: true },
   });
 
   const totalSessions = attendances.length;
-  let attended = 0, absent = 0, late = 0, excused = 0;
-  let totalAttendedHours = 0, totalScheduledHours = 0;
+  let attended = 0;
+  let absent = 0;
+  let late = 0;
+  let excused = 0;
+  let totalAttendedHours = 0;
+  let totalScheduledHours = 0;
 
-  attendances.forEach(a => {
-    const hours = a.session.durationMin / 60;
+  attendances.forEach((attendance) => {
+    const hours = attendance.session.durationMin / 60;
     totalScheduledHours += hours;
-    
-    switch (a.status) {
-      case 'PRESENT': attended++; totalAttendedHours += hours; break;
-      case 'LATE': late++; totalAttendedHours += hours; break;
-      case 'ABSENT': absent++; break;
-      case 'EXCUSED': excused++; break;
+
+    switch (attendance.status) {
+      case AttendanceStatus.PRESENT:
+        attended++;
+        totalAttendedHours += hours;
+        break;
+      case AttendanceStatus.LATE:
+        late++;
+        totalAttendedHours += hours;
+        break;
+      case AttendanceStatus.ABSENT:
+        absent++;
+        break;
+      case AttendanceStatus.EXCUSED:
+        excused++;
+        break;
     }
   });
 
@@ -94,6 +304,64 @@ export const getSummary = async (query: { traineeId: string, batchId: string }) 
     excused,
     attendancePct,
     totalScheduledHours,
-    totalAttendedHours
+    totalAttendedHours,
+  };
+};
+
+export const getMyReport = async (userId: string) => {
+  const trainee = await prisma.trainee.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      studentId: true,
+      enrollmentStatus: true,
+      user: { select: { firstName: true, lastName: true } },
+    },
+  });
+
+  if (!trainee) throw new AppError('Trainee profile not found', 404);
+
+  const attendances = await prisma.attendance.findMany({
+    where: { traineeId: trainee.id },
+    include: {
+      session: {
+        include: {
+          batch: { select: { name: true, code: true } },
+          module: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: [{ session: { date: 'desc' } }, { markedAt: 'desc' }],
+  });
+
+  const summary = attendances.reduce(
+    (acc, attendance) => {
+      acc.totalSessions += 1;
+      const hours = attendance.session.durationMin / 60;
+      acc.totalScheduledHours += hours;
+
+      if (attendance.status === AttendanceStatus.PRESENT) {
+        acc.attended += 1;
+        acc.totalAttendedHours += hours;
+      } else if (attendance.status === AttendanceStatus.LATE) {
+        acc.late += 1;
+        acc.totalAttendedHours += hours;
+      } else if (attendance.status === AttendanceStatus.ABSENT) {
+        acc.absent += 1;
+      } else if (attendance.status === AttendanceStatus.EXCUSED) {
+        acc.excused += 1;
+      }
+      return acc;
+    },
+    { totalSessions: 0, attended: 0, absent: 0, late: 0, excused: 0, totalScheduledHours: 0, totalAttendedHours: 0 },
+  );
+
+  return {
+    trainee,
+    summary: {
+      ...summary,
+      attendancePct: summary.totalSessions > 0 ? ((summary.attended + summary.late) / summary.totalSessions) * 100 : 0,
+    },
+    records: attendances,
   };
 };
