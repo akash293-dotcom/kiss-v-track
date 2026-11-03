@@ -142,13 +142,14 @@ export const deleteCampus = async (
     throw new NotFoundError('Campus not found');
   }
 
-  await prisma.campus.delete({
+  await prisma.campus.update({
     where: { id },
+    data: { isActive: false },
   });
 
   await createAuditLog(
     userId,
-    'DELETE',
+    'DEACTIVATE',
     'Campus',
     id,
     existing,
