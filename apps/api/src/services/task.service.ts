@@ -5,6 +5,7 @@ import { TaskStatus, SubmissionStatus, UserRole } from '@prisma/client';
 type Actor = {
   id: string;
   role: UserRole;
+  campusId?: string | null;
   trainee?: { id: string } | null;
   trainer?: { id: string } | null;
 };
