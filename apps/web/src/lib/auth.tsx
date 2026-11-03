@@ -25,12 +25,12 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token') || sessionStorage.getItem('token'));
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const initAuth = async () => {
-      const storedToken = localStorage.getItem('token');
+      const storedToken = localStorage.getItem('token') || sessionStorage.getItem('token');
       if (storedToken) {
         try {
           const response = await api.get('/auth/me');
@@ -39,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (error) {
           console.error("Auth check failed", error);
           localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
           setToken(null);
           setUser(null);
         }
@@ -56,7 +57,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    const activeToken = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (activeToken) {
+      void api.post('/auth/logout').catch((error) => console.error('Logout request failed:', error));
+    }
     localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setToken(null);
     setUser(null);
     window.location.href = '/login';
