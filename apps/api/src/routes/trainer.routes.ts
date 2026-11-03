@@ -11,6 +11,7 @@ router.get('/', requireRole([UserRole.ADMIN, UserRole.CENTRE_ADMIN]), controller
 router.get('/:id', controller.getProfile);
 router.post('/', requireRole([UserRole.ADMIN, UserRole.CENTRE_ADMIN]), controller.create);
 router.patch('/:id', requireRole([UserRole.ADMIN, UserRole.CENTRE_ADMIN]), controller.update);
+router.delete('/:id', requireRole([UserRole.ADMIN, UserRole.CENTRE_ADMIN]), controller.remove);
 router.get('/:id/batches', controller.getBatches);
 
 export default router;
