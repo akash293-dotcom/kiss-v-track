@@ -152,6 +152,7 @@ const App = () => {
         <Route path="batches/:id" element={<BatchDetail />} />
         <Route path="sessions" element={<SessionList />} />
         <Route path="sessions/new" element={<SessionForm />} />
+        <Route path="sessions/:id/edit" element={<SessionForm />} />
         <Route path="attendance/:sessionId" element={<AttendanceMarking />} />
         <Route path="attendance" element={<AttendanceReport />} />
         <Route path="tasks" element={<TaskList />} />
