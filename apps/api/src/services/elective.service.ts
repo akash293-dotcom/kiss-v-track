@@ -40,5 +40,5 @@ export const update = async (id: string, data: any) => {
 
 export const remove = async (id: string) => {
   await get(id);
-  return prisma.vocationalElective.delete({ where: { id } });
+  return prisma.vocationalElective.update({ where: { id }, data: { status: 'ARCHIVED' } });
 };
