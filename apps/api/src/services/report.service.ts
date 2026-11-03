@@ -50,7 +50,13 @@ export const getBatchReport = async (id: string) => {
   const [enrollments, sessions] = await Promise.all([
     prisma.enrollment.findMany({
       where: { batchId: id, status: 'ACTIVE' },
-      include: { trainee: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
+      include: {
+        trainee: {
+          include: {
+            user: { select: { firstName: true, lastName: true, email: true } },
+          },
+        },
+      },
     }),
     prisma.trainingSession.findMany({
       where: { batchId: id },
