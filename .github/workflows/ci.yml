@@ -24,6 +24,8 @@ jobs:
 
       - run: npm ci
       - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
       - run: npm run typecheck --if-present --workspaces
 
   test-unit:
@@ -41,6 +43,11 @@ jobs:
 
       - run: npm ci
       - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
+      - run: npm run test:unit
+        env:
+          NODE_ENV: test
       - run: npm run test --if-present --workspaces
         env:
           NODE_ENV: test
@@ -75,12 +82,14 @@ jobs:
 
       - run: npm ci
       - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
 
       - run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
 
-      - run: npm run test:integration --if-present
+      - run: npm run test:integration
         env:
           DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
           JWT_SECRET: test-jwt-secret-32-chars-minimum-ok
@@ -101,6 +110,8 @@ jobs:
 
       - run: npm ci
       - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://kiss_user:kiss_password@localhost:5432/kiss_vtrack_test
       - run: npm run build
 
       - name: Upload API artifact
