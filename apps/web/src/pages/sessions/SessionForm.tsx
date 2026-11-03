@@ -360,12 +360,14 @@ export default function SessionForm() {
                     : 'Select Trainer',
                   value: '',
                 },
-                ...(user?.role === 'TRAINER' ? [{ label: `${user.firstName} ${user.lastName}`, value: user.trainer?.id || '' }] : trainers.map((trainer: any) => ({
-                  label: trainer.user
-                    ? `${trainer.user.firstName || ''} ${trainer.user.lastName || ''}`.trim()
-                    : trainer.name || trainer.id,
-                  value: trainer.id,
-                })),
+                ...(user?.role === 'TRAINER'
+                  ? [{ label: `${user.firstName} ${user.lastName}`, value: user.trainer?.id || '' }]
+                  : trainers.map((trainer: any) => ({
+                      label: trainer.user
+                        ? `${trainer.user.firstName || ''} ${trainer.user.lastName || ''}`.trim()
+                        : trainer.name || trainer.id,
+                      value: trainer.id,
+                    }))),
               ]}
             />
           </FormField>
