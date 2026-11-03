@@ -15,7 +15,11 @@ export const list = async (query: { page?: number; limit?: number; traineeId?: s
     prisma.certificate.findMany({
       where,
       include: {
-        trainee: { include: { user: { select: { firstName: true, lastName: true, email: true } } },
+        trainee: {
+          include: {
+            user: { select: { firstName: true, lastName: true, email: true } },
+          },
+        },
       },
       orderBy: { issueDate: 'desc' },
       skip: (page - 1) * limit,
