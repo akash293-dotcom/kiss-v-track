@@ -18,6 +18,9 @@ export const list = async (query: any) => {
   const where: any = {};
 
   if (campusId) where.campusId = campusId;
+  if (trainerId) {
+    where.enrollments = { some: { status: 'ACTIVE', batch: { trainerId } } };
+  }
   if (enrollmentStatus) where.enrollmentStatus = enrollmentStatus;
 
   if (search) {
