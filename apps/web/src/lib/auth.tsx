@@ -11,13 +11,15 @@ export interface AuthUser {
   profilePhoto: string | null;
   campusId: string | null;
   isActive: boolean;
+  trainer?: { id: string; employeeId?: string } | null;
+  trainee?: { id: string; studentId?: string } | null;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (token: string, user: AuthUser) => void;
+  login: (token: string, user: AuthUser, remember?: boolean) => void;
   logout: () => void;
 }
 
@@ -50,8 +52,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const login = (newToken: string, newUser: AuthUser) => {
-    localStorage.setItem('token', newToken);
+  const login = (newToken: string, newUser: AuthUser, remember = true) => {
+    if (remember) {
+      localStorage.setItem('token', newToken);
+      sessionStorage.removeItem('token');
+    } else {
+      sessionStorage.setItem('token', newToken);
+      localStorage.removeItem('token');
+    }
     setToken(newToken);
     setUser(newUser);
   };
