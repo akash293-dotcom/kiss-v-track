@@ -65,5 +65,5 @@ export const update = async (id: string, data: any) => {
 
 export const remove = async (id: string) => {
   await get(id);
-  return prisma.module.delete({ where: { id } });
+  return prisma.module.update({ where: { id }, data: { isActive: false } });
 };
