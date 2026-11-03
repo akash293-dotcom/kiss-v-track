@@ -252,7 +252,7 @@ export default function SessionForm() {
         queryKey: ['adminDashboard'],
       });
 
-      navigate('/admin/sessions');
+      navigate(listPath);
     },
 
     onError: (error: any) => {
