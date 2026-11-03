@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import config from '../config';
-import { UnauthorizedError, NotFoundError } from '../lib/errors';
+import { UnauthorizedError, NotFoundError, AppError } from '../lib/errors';
 import { Request } from 'express';
 
 export const login = async (email: string, password: string, req: Request) => {
@@ -86,7 +86,7 @@ export const changePassword = async (userId: string, current: string, newPass: s
 // email provider in this repository; users are directed to their administrator
 // rather than receiving a success response for a link that was never sent.
 export const forgotPassword = async (_email: string) => {
-  return;
+  throw new AppError('Password reset email is not configured. Please contact your administrator.', 501);
 };
 
 export const resetPassword = async (_token: string, _newPass: string) => {
