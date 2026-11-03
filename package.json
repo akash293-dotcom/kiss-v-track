@@ -30,7 +30,8 @@
     "clean": "rimraf apps/*/dist packages/*/dist node_modules/.cache",
     "android:build": "node scripts/build-android.js",
     "android:build:release": "node scripts/build-android.js --release",
-    "android:open": "npm run android:open --workspace=apps/web"
+    "android:open": "npm run android:open --workspace=apps/web",
+    "test:integration": "vitest run --config vitest.config.ts tests/integration"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
