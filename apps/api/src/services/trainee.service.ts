@@ -12,62 +12,29 @@ export const list = async (query: any) => {
     search,
   } = query;
 
-  const skip = (Number(page) - 1) * Number(limit);
-
+  const safePage = Math.max(1, Number(page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
+  const skip = (safePage - 1) * safeLimit;
   const where: any = {};
 
-  if (campusId) {
-    where.campusId = campusId;
-  }
-
-  if (enrollmentStatus) {
-    where.enrollmentStatus = enrollmentStatus;
-  }
+  if (campusId) where.campusId = campusId;
+  if (enrollmentStatus) where.enrollmentStatus = enrollmentStatus;
 
   if (search) {
     where.OR = [
-      {
-        studentId: {
-          contains: search,
-          mode: 'insensitive',
-        },
-      },
-      {
-        user: {
-          firstName: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      },
-      {
-        user: {
-          lastName: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      },
-      {
-        user: {
-          email: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      },
+      { studentId: { contains: String(search), mode: 'insensitive' } },
+      { user: { firstName: { contains: String(search), mode: 'insensitive' } } },
+      { user: { lastName: { contains: String(search), mode: 'insensitive' } } },
+      { user: { email: { contains: String(search), mode: 'insensitive' } } },
     ];
   }
 
   const [total, trainees] = await Promise.all([
-    prisma.trainee.count({
-      where,
-    }),
-
+    prisma.trainee.count({ where }),
     prisma.trainee.findMany({
       where,
       skip,
-      take: Number(limit),
+      take: safeLimit,
       include: {
         user: {
           select: {
@@ -78,50 +45,42 @@ export const list = async (query: any) => {
             isActive: true,
           },
         },
-        campus: {
-          select: {
-            name: true,
-          },
-        },
+        campus: { select: { name: true } },
       },
+      orderBy: { createdAt: 'desc' },
     }),
   ]);
 
-  return {
-    total,
-    page: Number(page),
-    limit: Number(limit),
-    trainees,
-  };
+  return { total, page: safePage, limit: safeLimit, trainees };
 };
 
 export const getProfile = async (id: string) => {
   const trainee = await prisma.trainee.findUnique({
     where: { id },
     include: {
-      user: true,
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          profilePhoto: true,
+          campusId: true,
+          isActive: true,
+        },
+      },
       campus: true,
       enrollments: {
         include: {
-          batch: {
-            include: {
-              elective: true,
-            },
-          },
+          batch: { include: { elective: true } },
         },
       },
-      traineeSkills: {
-        include: {
-          skill: true,
-        },
-      },
+      traineeSkills: { include: { skill: true } },
     },
   });
 
-  if (!trainee) {
-    throw new AppError('Trainee not found', 404);
-  }
-
+  if (!trainee) throw new AppError('Trainee not found', 404);
   return trainee;
 };
 
@@ -138,25 +97,13 @@ export const create = async (data: any) => {
     dateOfBirth,
   } = data;
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) throw new AppError('Email already in use', 400);
 
-  if (existingUser) {
-    throw new AppError('Email already in use', 400);
-  }
+  const existingTrainee = await prisma.trainee.findUnique({ where: { studentId } });
+  if (existingTrainee) throw new AppError('Student ID already in use', 400);
 
-  const existingTrainee = await prisma.trainee.findUnique({
-    where: { studentId },
-  });
-
-  if (existingTrainee) {
-    throw new AppError('Student ID already in use', 400);
-  }
-
-  if (!password) {
-    throw new AppError('Password is required', 400);
-  }
+  if (!password) throw new AppError('Password is required', 400);
 
   const passwordHash = await bcrypt.hash(password, 10);
   const username = studentId;
@@ -175,7 +122,7 @@ export const create = async (data: any) => {
       },
     });
 
-    const trainee = await tx.trainee.create({
+    return tx.trainee.create({
       data: {
         userId: user.id,
         studentId,
@@ -184,58 +131,56 @@ export const create = async (data: any) => {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
     });
-
-    return trainee;
   });
 };
 
 export const update = async (id: string, data: any) => {
   const trainee = await prisma.trainee.findUnique({
     where: { id },
-    include: {
-      user: true,
-    },
+    include: { user: true },
   });
-
-  if (!trainee) {
-    throw new AppError('Trainee not found', 404);
-  }
+  if (!trainee) throw new AppError('Trainee not found', 404);
 
   const {
     firstName,
     lastName,
     email,
     phone,
+    password,
     ...traineeData
   } = data;
 
   return prisma.$transaction(async (tx) => {
-    await tx.trainee.update({
-      where: { id },
-      data: traineeData,
-    });
+    if (Object.keys(traineeData).length > 0) {
+      await tx.trainee.update({ where: { id }, data: traineeData });
+    }
 
-    if (
-      firstName !== undefined ||
-      lastName !== undefined ||
-      email !== undefined ||
-      phone !== undefined
-    ) {
-      await tx.user.update({
-        where: { id: trainee.userId },
-        data: {
-          firstName,
-          lastName,
-          email,
-          phone,
-        },
-      });
+    const userData: any = {};
+    if (firstName !== undefined) userData.firstName = firstName;
+    if (lastName !== undefined) userData.lastName = lastName;
+    if (email !== undefined) userData.email = email;
+    if (phone !== undefined) userData.phone = phone;
+    if (password) userData.passwordHash = await bcrypt.hash(password, 10);
+
+    if (Object.keys(userData).length > 0) {
+      await tx.user.update({ where: { id: trainee.userId }, data: userData });
     }
 
     return tx.trainee.findUnique({
       where: { id },
       include: {
-        user: true,
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            profilePhoto: true,
+            campusId: true,
+            isActive: true,
+          },
+        },
         campus: true,
       },
     });
@@ -244,109 +189,54 @@ export const update = async (id: string, data: any) => {
 
 export const getSkills = async (id: string) => {
   return prisma.traineeSkill.findMany({
-    where: {
-      traineeId: id,
-    },
-    include: {
-      skill: true,
-    },
+    where: { traineeId: id },
+    include: { skill: true },
   });
 };
 
 export const getAttendanceSummary = async (id: string) => {
   const attendance = await prisma.attendance.findMany({
-    where: {
-      traineeId: id,
-    },
-    include: {
-      session: true,
-    },
-    orderBy: {
-      markedAt: 'desc',
-    },
+    where: { traineeId: id },
+    include: { session: true },
+    orderBy: { markedAt: 'desc' },
   });
 
   const total = attendance.length;
+  const present = attendance.filter((item) => item.status === 'PRESENT' || item.status === 'LATE').length;
+  const absent = attendance.filter((item) => item.status === 'ABSENT').length;
+  const attendancePercentage = total > 0 ? Math.round((present / total) * 100) : 0;
 
-  const present = attendance.filter(
-    (item) =>
-      item.status === 'PRESENT' ||
-      item.status === 'LATE'
-  ).length;
-
-  const absent = attendance.filter(
-    (item) => item.status === 'ABSENT'
-  ).length;
-
-  const attendancePercentage =
-    total > 0
-      ? Math.round((present / total) * 100)
-      : 0;
-
-  return {
-    total,
-    present,
-    absent,
-    attendancePercentage,
-    attendance,
-  };
+  return { total, present, absent, attendancePercentage, attendance };
 };
 
 export const getProducts = async (id: string) => {
   return prisma.product.findMany({
-    where: {
-      traineeId: id,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
+    where: { traineeId: id },
+    orderBy: { createdAt: 'desc' },
   });
 };
 
 export const getCertificates = async (id: string) => {
-  return prisma.certificate.findMany({
-    where: {
-      traineeId: id,
-    },
-  });
+  return prisma.certificate.findMany({ where: { traineeId: id } });
 };
 
 export const getSkillPassport = async (id: string) => {
   return prisma.traineeSkill.findMany({
-    where: {
-      traineeId: id,
-    },
-    include: {
-      skill: {
-        include: {
-          category: true,
-        },
-      },
-    },
+    where: { traineeId: id },
+    include: { skill: { include: { category: true } } },
   });
 };
 
 export const remove = async (id: string) => {
-  const trainee = await prisma.trainee.findUnique({
-    where: { id },
-  });
+  const trainee = await prisma.trainee.findUnique({ where: { id } });
+  if (!trainee) throw new AppError('Trainee not found', 404);
 
-  if (!trainee) {
-    throw new AppError(
-      'Trainee not found',
-      404
-    );
-  }
-
+  // Deactivate rather than deleting linked attendance, assessments and certificates.
   return prisma.$transaction(async (tx) => {
-    await tx.trainee.delete({
+    await tx.user.update({ where: { id: trainee.userId }, data: { isActive: false } });
+    return tx.trainee.update({
       where: { id },
+      data: { enrollmentStatus: 'INACTIVE' },
     });
-
-    await tx.user.delete({
-      where: { id: trainee.userId },
-    });
-
-    return true;
   });
 };
