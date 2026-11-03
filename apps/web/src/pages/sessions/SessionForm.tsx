@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import api from '../../lib/api';
+import { useAuth } from '../../hooks/useAuth';
 
 const sessionSchema = z.object({
   batchId: z.string().min(1, 'Batch is required'),
@@ -86,6 +87,8 @@ export default function SessionForm() {
   const { id } = useParams<{ id: string }>();
 
   const isEditMode = Boolean(id);
+  const { user } = useAuth();
+  const listPath = user?.role === 'TRAINER' ? '/trainer/sessions' : '/admin/sessions';
 
   const {
     register,
@@ -143,6 +146,7 @@ export default function SessionForm() {
     isLoading: trainersLoading,
   } = useQuery({
     queryKey: ['trainers'],
+    enabled: user?.role !== 'TRAINER',
     queryFn: async () => {
       const response = await api.get('/trainers');
       return getArray(response, 'trainers');
@@ -167,7 +171,7 @@ export default function SessionForm() {
 
     reset({
       batchId: session.batchId || '',
-      trainerId: session.trainerId || '',
+      trainerId: session.trainerId || user?.trainer?.id || '',
       moduleId: session.moduleId || '',
       date: formatDate(session.date),
       startTime: session.startTime || '',
@@ -180,13 +184,13 @@ export default function SessionForm() {
       status: session.status || 'SCHEDULED',
       remarks: session.remarks || '',
     });
-  }, [session, reset]);
+  }, [session, reset, user?.trainer?.id]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: SessionFormData) => {
       const payload = {
         batchId: data.batchId,
-        trainerId: data.trainerId,
+        trainerId: user?.role === 'TRAINER' ? user.trainer?.id : data.trainerId,
         moduleId: data.moduleId || undefined,
         date: data.date,
         startTime: data.startTime,
@@ -220,7 +224,7 @@ export default function SessionForm() {
         queryKey: ['adminDashboard'],
       });
 
-      navigate('/admin/sessions');
+      navigate(listPath);
     },
 
     onError: (error: any) => {
@@ -272,7 +276,7 @@ export default function SessionForm() {
     }
 
     const confirmed = window.confirm(
-      'Are you sure you want to delete this session? This action cannot be undone.'
+      'Cancel this session? Existing attendance history will be preserved.'
     );
 
     if (confirmed) {
@@ -356,7 +360,7 @@ export default function SessionForm() {
                     : 'Select Trainer',
                   value: '',
                 },
-                ...trainers.map((trainer: any) => ({
+                ...(user?.role === 'TRAINER' ? [{ label: `${user.firstName} ${user.lastName}`, value: user.trainer?.id || '' }] : trainers.map((trainer: any) => ({
                   label: trainer.user
                     ? `${trainer.user.firstName || ''} ${trainer.user.lastName || ''}`.trim()
                     : trainer.name || trainer.id,
@@ -528,7 +532,7 @@ export default function SessionForm() {
                   }
                   isLoading={deleteMutation.isPending}
                 >
-                  Delete Session
+                  Cancel Session
                 </Button>
               )}
             </div>
