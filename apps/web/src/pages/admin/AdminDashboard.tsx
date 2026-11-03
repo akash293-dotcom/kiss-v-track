@@ -155,50 +155,8 @@ export default function AdminDashboard() {
     staleTime: 0,
   });
 
-  const {
-    data: skillResponse,
-    isLoading: skillLoading,
-  } = useQuery({
-    queryKey: ['dashboardSkills'],
-    queryFn: async () => {
-      const response = await api.get('/skills', {
-        params: {
-          page: 1,
-          limit: 1,
-        },
-      });
-
-      return response.data;
-    },
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
-    staleTime: 0,
-  });
-
-  const {
-    data: assessmentResponse,
-    isLoading: assessmentLoading,
-  } = useQuery({
-    queryKey: ['dashboardAssessments'],
-    queryFn: async () => {
-      const response = await api.get('/assessments', {
-        params: {
-          page: 1,
-          limit: 1,
-        },
-      });
-
-      return response.data;
-    },
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
-    staleTime: 0,
-  });
-
   if (
-    dashboardLoading ||
-    skillLoading ||
-    assessmentLoading
+    dashboardLoading
   ) {
     return (
       <LoadingSpinner fullScreen />
@@ -207,11 +165,9 @@ export default function AdminDashboard() {
 
   const dashboard = dashboardResponse || {};
 
-  const totalSkills =
-    skillResponse?.meta?.total || 0;
+  const totalSkills = dashboard.totalSkills || 0;
 
-  const assessmentsConducted =
-    assessmentResponse?.meta?.total || 0;
+  const assessmentsConducted = dashboard.totalAssessments || 0;
 
   const skillDistribution =
     dashboard.skillDistribution || [];
