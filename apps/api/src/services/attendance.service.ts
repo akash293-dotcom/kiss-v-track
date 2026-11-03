@@ -1,6 +1,6 @@
 import { AttendanceStatus, UserRole } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { AppError, ForbiddenError } from '../lib/errors';
+import { AppError } from '../lib/errors';
 
 const validStatuses = new Set<string>(Object.values(AttendanceStatus));
 
@@ -83,29 +83,7 @@ export const listSessions = async (query: any, user: { id: string; role: UserRol
   });
 };
 
-type AttendanceActor = {
-  id: string;
-  role: UserRole;
-  campusId?: string | null;
-  trainer?: { id: string } | null;
-  trainee?: { id: string } | null;
-};
-
-const assertSessionAccess = async (session: any, actor: AttendanceActor) => {
-  if (actor.role === UserRole.ADMIN) return;
-  if (actor.role === UserRole.CENTRE_ADMIN && session.batch.campusId === actor.campusId) return;
-  if (actor.role === UserRole.TRAINER && session.trainerId === actor.trainer?.id) return;
-  if (actor.role === UserRole.TRAINEE && actor.trainee?.id) {
-    const enrolled = await prisma.enrollment.findFirst({
-      where: { traineeId: actor.trainee.id, batchId: session.batchId, status: 'ACTIVE' },
-      select: { id: true },
-    });
-    if (enrolled) return;
-  }
-  throw new ForbiddenError('You do not have access to this session attendance');
-};
-
-export const getSessionAttendance = async (sessionId: string, actor: AttendanceActor) => {
+export const getSessionAttendance = async (sessionId: string) => {
   const session = await prisma.trainingSession.findUnique({
     where: { id: sessionId },
     include: {
@@ -116,7 +94,6 @@ export const getSessionAttendance = async (sessionId: string, actor: AttendanceA
   });
 
   if (!session) throw new AppError('Session not found', 404);
-  await assertSessionAccess(session, actor);
 
   const [enrollments, attendances] = await Promise.all([
     prisma.enrollment.findMany({
@@ -203,7 +180,7 @@ export const markBulk = async (
   sessionId: string,
   records: { traineeId: string; status: AttendanceStatus; remarks?: string }[],
   markedById: string,
-  actor: AttendanceActor,
+  markerRole: UserRole,
 ) => {
   if (!sessionId || !Array.isArray(records) || records.length === 0) {
     throw new AppError('sessionId and at least one attendance record are required', 400);
@@ -241,21 +218,10 @@ export const markBulk = async (
   }
 
   let markerTrainerId: string | undefined;
-  if (actor.role === UserRole.TRAINER) {
-    if (!actor.trainer?.id || actor.trainer.id !== session.trainerId) {
-      throw new ForbiddenError('You can only mark attendance for sessions assigned to you');
-    }
-    markerTrainerId = actor.trainer.id;
-  } else if (actor.role === UserRole.CENTRE_ADMIN) {
-    const sessionCampus = await prisma.trainingBatch.findUnique({
-      where: { id: session.batchId },
-      select: { campusId: true },
-    });
-    if (!sessionCampus || sessionCampus.campusId !== actor.campusId) {
-      throw new ForbiddenError('You can only mark attendance within your campus');
-    }
-  } else if (actor.role !== UserRole.ADMIN) {
-    throw new ForbiddenError('You cannot mark attendance');
+  if (markerRole === UserRole.TRAINER) {
+    const trainer = await prisma.trainer.findUnique({ where: { userId: markedById }, select: { id: true } });
+    if (!trainer) throw new AppError('Trainer profile not found', 403);
+    markerTrainerId = trainer.id;
   }
 
   const saved = await prisma.$transaction(async (tx) => {
@@ -289,27 +255,9 @@ export const markBulk = async (
   return saved;
 };
 
-export const getSummary = async (query: { traineeId: string; batchId: string }, actor: AttendanceActor) => {
+export const getSummary = async (query: { traineeId: string; batchId: string }) => {
   const { traineeId, batchId } = query;
   if (!traineeId || !batchId) throw new AppError('traineeId and batchId are required', 400);
-
-  const batch = await prisma.trainingBatch.findUnique({
-    where: { id: batchId },
-    select: { id: true, campusId: true, trainerId: true },
-  });
-  if (!batch) throw new AppError('Batch not found', 404);
-
-  if (actor.role === UserRole.TRAINEE) {
-    if (traineeId !== actor.trainee?.id) throw new ForbiddenError('You can only view your own attendance');
-    const enrolled = await prisma.enrollment.findFirst({ where: { traineeId, batchId, status: 'ACTIVE' }, select: { id: true } });
-    if (!enrolled) throw new ForbiddenError('You are not enrolled in this batch');
-  } else if (actor.role === UserRole.TRAINER) {
-    if (!actor.trainer?.id || batch.trainerId !== actor.trainer.id) throw new ForbiddenError('You can only view attendance for batches assigned to you');
-  } else if (actor.role === UserRole.CENTRE_ADMIN) {
-    if (batch.campusId !== actor.campusId) throw new ForbiddenError('You cannot view attendance outside your campus');
-  } else if (actor.role !== UserRole.ADMIN) {
-    throw new ForbiddenError('You cannot view this attendance summary');
-  }
 
   const attendances = await prisma.attendance.findMany({
     where: { traineeId, session: { batchId } },

@@ -96,7 +96,7 @@ export const submitTask = async (taskId: string, data: any) => {
   const { traineeId, description, fileUrls } = data;
   const task = await prisma.practicalTask.findUnique({ where: { id: taskId } });
   if (!task) throw new AppError('Task not found', 404);
-  if (![TaskStatus.PUBLISHED, TaskStatus.ACTIVE].includes(task.status)) throw new AppError('This task is not accepting submissions', 400);
+  if (task.status !== TaskStatus.PUBLISHED && task.status !== TaskStatus.ACTIVE) throw new AppError('This task is not accepting submissions', 400);
   if (task.deadline && task.deadline < new Date()) throw new AppError('The submission deadline has passed', 400);
 
   if (task.batchId) {

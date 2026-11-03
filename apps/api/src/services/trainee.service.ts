@@ -8,10 +8,10 @@ export const list = async (query: any) => {
     page = 1,
     limit = 10,
     campusId,
+    trainerId,
     enrollmentStatus,
     search,
   } = query;
-
   const safePage = Math.max(1, Number(page) || 1);
   const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
   const skip = (safePage - 1) * safeLimit;
