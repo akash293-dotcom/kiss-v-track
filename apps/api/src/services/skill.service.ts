@@ -33,7 +33,7 @@ export const update = async (id: string, data: any) => {
 
 export const remove = async (id: string) => {
   await get(id);
-  return prisma.skill.delete({ where: { id } });
+  return prisma.skill.update({ where: { id }, data: { isActive: false } });
 };
 
 export const verifySkill = async (data: { traineeId: string, skillId: string, assessmentNotes?: string }, trainerId: string) => {
