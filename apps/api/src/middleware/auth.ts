@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import config from '../config';
 import prisma from '../lib/prisma';
-import { UnauthorizedError } from '../lib/errors';
+import { UnauthorizedError, ForbiddenError } from '../lib/errors';
 import { UserRole } from '@prisma/client';
 
 interface JwtPayload {
@@ -91,7 +91,7 @@ export const requireRole = (...roles: (UserRole | UserRole[])[]) => {
       return next(new UnauthorizedError('Not authenticated'));
     }
     if (!flatRoles.includes(req.user.role as UserRole)) {
-      return next(new UnauthorizedError('Insufficient permissions'));
+      return next(new ForbiddenError('Insufficient permissions'));
     }
     return next();
   };
