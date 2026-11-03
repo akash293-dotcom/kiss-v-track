@@ -29,7 +29,7 @@ export const list = async (query: any, actor: Actor) => {
   return prisma.assessment.findMany({
     where,
     include: {
-      trainee: { include: { user: { select: { firstName: true, lastName: true, studentId: false } } } },
+      trainee: { include: { user: { select: { firstName: true, lastName: true } } } },
       trainer: { include: { user: { select: { firstName: true, lastName: true } } } },
       assessmentSkills: { include: { skill: { select: { name: true } } } },
     },
