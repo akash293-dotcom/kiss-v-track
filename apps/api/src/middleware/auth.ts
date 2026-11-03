@@ -2,35 +2,67 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import config from '../config';
 import prisma from '../lib/prisma';
-import { UnauthorizedError, ForbiddenError } from '../lib/errors';
+import { UnauthorizedError } from '../lib/errors';
 import { UserRole } from '@prisma/client';
 
 interface JwtPayload {
   id: string;
-  role: UserRole;
+  role?: UserRole;
+  exp?: number;
 }
 
 export const authenticate = async (req: Request, _res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return next(new UnauthorizedError('No token provided'));
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim();
+  if (!token) {
+    return next(new UnauthorizedError('No token provided'));
+  }
+
+  let decoded: JwtPayload;
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedError('No token provided');
+    decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
+  } catch {
+    return next(new UnauthorizedError('Invalid or expired token'));
+  }
+
+  if (!decoded.id) {
+    return next(new UnauthorizedError('Invalid token payload'));
+  }
+
+  try {
+    // A signed JWT is also tied to a server-side session so logout and
+    // session revocation take effect immediately, not only after JWT expiry.
+    const [session, user] = await Promise.all([
+      prisma.session.findFirst({
+        where: {
+          token,
+          userId: decoded.id,
+          isValid: true,
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: decoded.id },
+        include: {
+          trainer: true,
+          trainee: true,
+        },
+      }),
+    ]);
+
+    if (!session) {
+      return next(new UnauthorizedError('Session is invalid or has expired. Please sign in again.'));
     }
-
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-      throw new UnauthorizedError('No token provided');
-    }
-
-    const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
-    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
-
     if (!user) {
-      throw new UnauthorizedError('User not found');
+      return next(new UnauthorizedError('User not found'));
     }
-
     if (!user.isActive) {
-      throw new UnauthorizedError('User account is inactive');
+      return next(new UnauthorizedError('User account is inactive'));
     }
 
     req.user = {
@@ -43,14 +75,12 @@ export const authenticate = async (req: Request, _res: Response, next: NextFunct
       profilePhoto: user.profilePhoto,
       campusId: user.campusId,
       isActive: user.isActive,
+      trainer: user.trainer,
+      trainee: user.trainee,
     };
-    next();
+    return next();
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      next(error);
-    } else {
-      next(new UnauthorizedError('Invalid or expired token'));
-    }
+    return next(error);
   }
 };
 
@@ -61,8 +91,8 @@ export const requireRole = (...roles: (UserRole | UserRole[])[]) => {
       return next(new UnauthorizedError('Not authenticated'));
     }
     if (!flatRoles.includes(req.user.role as UserRole)) {
-      return next(new ForbiddenError('Insufficient permissions'));
+      return next(new UnauthorizedError('Insufficient permissions'));
     }
-    next();
+    return next();
   };
 };
