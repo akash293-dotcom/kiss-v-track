@@ -372,7 +372,7 @@ describe('Certificate Number Generation', () => {
 
 describe('Shared Validation Schemas', () => {
   it('should validate login schema', async () => {
-    const { loginSchema } = await import('../packages/shared/src/validation');
+    const { loginSchema } = await import('../../packages/shared/src/validation');
 
     const valid = loginSchema.safeParse({ email: 'test@example.com', password: 'password123' });
     expect(valid.success).toBe(true);
@@ -382,7 +382,7 @@ describe('Shared Validation Schemas', () => {
   });
 
   it('should validate pagination schema', async () => {
-    const { paginationSchema } = await import('../packages/shared/src/validation');
+    const { paginationSchema } = await import('../../packages/shared/src/validation');
 
     const result = paginationSchema.safeParse({ page: '2', limit: '10' });
     expect(result.success).toBe(true);
@@ -393,7 +393,7 @@ describe('Shared Validation Schemas', () => {
   });
 
   it('should reject limit over 100', async () => {
-    const { paginationSchema } = await import('../packages/shared/src/validation');
+    const { paginationSchema } = await import('../../packages/shared/src/validation');
 
     const result = paginationSchema.safeParse({ limit: '200' });
     expect(result.success).toBe(false);
