@@ -55,12 +55,12 @@ export default function LoginPage() {
         return;
       }
 
-      localStorage.setItem("token", data.token);
-
       if (remember) {
-        localStorage.setItem("rememberLogin", "true");
+        localStorage.setItem("token", data.token);
+        sessionStorage.removeItem("token");
       } else {
-        localStorage.removeItem("rememberLogin");
+        sessionStorage.setItem("token", data.token);
+        localStorage.removeItem("token");
       }
 
       window.location.href = "/";
