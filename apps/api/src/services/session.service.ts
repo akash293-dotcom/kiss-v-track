@@ -89,9 +89,12 @@ export const create = async (input: any, actor: Actor) => {
   validateTimes(data);
   if (!data.batchId || !data.date || !data.startTime || !data.endTime) throw new AppError('Batch, date, start time and end time are required', 400);
 
-  const batch = await prisma.trainingBatch.findUnique({ where: { id: data.batchId }, select: { id: true, trainerId: true, electiveId: true, status: true } });
+  const batch = await prisma.trainingBatch.findUnique({ where: { id: data.batchId }, select: { id: true, trainerId: true, electiveId: true, status: true, campusId: true } });
   if (!batch) throw new AppError('Batch not found', 404);
   if (batch.status === 'CANCELLED' || batch.status === 'COMPLETED') throw new AppError('Cannot schedule sessions for a cancelled or completed batch', 400);
+  if (actor.role === UserRole.CENTRE_ADMIN && batch.campusId !== actor.campusId) {
+    throw new ForbiddenError('You can only schedule sessions within your campus');
+  }
 
   if (actor.role === UserRole.TRAINER) {
     if (!actor.trainer?.id || batch.trainerId !== actor.trainer.id) throw new ForbiddenError('You can only schedule sessions for batches assigned to you');
@@ -100,6 +103,9 @@ export const create = async (input: any, actor: Actor) => {
     throw new AppError('Trainer is required', 400);
   }
 
+  if (batch.trainerId && batch.trainerId !== data.trainerId) {
+    throw new AppError('The selected trainer is not assigned to this batch', 400);
+  }
   if (data.moduleId) {
     const module = await prisma.module.findUnique({ where: { id: data.moduleId }, select: { electiveId: true } });
     if (!module || module.electiveId !== batch.electiveId) throw new AppError('The selected module does not belong to the batch program', 400);
@@ -112,13 +118,26 @@ export const create = async (input: any, actor: Actor) => {
 
 export const update = async (id: string, input: any, actor: Actor) => {
   const existing = await get(id, actor);
-  if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.TRAINER) throw new ForbiddenError('You cannot update sessions');
+  if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.CENTRE_ADMIN && actor.role !== UserRole.TRAINER) throw new ForbiddenError('You cannot update sessions');
   const data = { ...input };
   if (actor.role === UserRole.TRAINER) {
     data.trainerId = actor.trainer!.id;
     if (data.batchId && data.batchId !== existing.batchId) {
       const batch = await prisma.trainingBatch.findUnique({ where: { id: data.batchId }, select: { trainerId: true } });
       if (!batch || batch.trainerId !== actor.trainer!.id) throw new ForbiddenError('You can only move a session to a batch assigned to you');
+    }
+  }
+  if (actor.role === UserRole.CENTRE_ADMIN) {
+    const targetBatchId = data.batchId || existing.batchId;
+    const targetBatch = await prisma.trainingBatch.findUnique({
+      where: { id: targetBatchId },
+      select: { campusId: true, trainerId: true, electiveId: true },
+    });
+    if (!targetBatch || targetBatch.campusId !== actor.campusId) {
+      throw new ForbiddenError('You can only update sessions within your campus');
+    }
+    if (data.trainerId && targetBatch.trainerId && data.trainerId !== targetBatch.trainerId) {
+      throw new AppError('The selected trainer is not assigned to this batch', 400);
     }
   }
   validateTimes(data);
@@ -139,6 +158,6 @@ export const update = async (id: string, input: any, actor: Actor) => {
 // Cancelling a session preserves its attendance history and audit trail.
 export const remove = async (id: string, actor: Actor) => {
   await get(id, actor);
-  if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.TRAINER) throw new ForbiddenError('You cannot cancel sessions');
+  if (actor.role !== UserRole.ADMIN && actor.role !== UserRole.CENTRE_ADMIN && actor.role !== UserRole.TRAINER) throw new ForbiddenError('You cannot cancel sessions');
   return prisma.trainingSession.update({ where: { id }, data: { status: 'CANCELLED', remarks: 'Cancelled by user' } });
 };
