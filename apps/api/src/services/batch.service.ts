@@ -96,7 +96,13 @@ export const getEnrollments = async (id: string, actor: Actor) => {
   await get(id, actor);
   return prisma.enrollment.findMany({
     where: { batchId: id },
-    include: { trainee: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
+    include: {
+      trainee: {
+        include: {
+          user: { select: { firstName: true, lastName: true, email: true } },
+        },
+      },
+    },
   });
 };
 
