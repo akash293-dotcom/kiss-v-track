@@ -37,6 +37,15 @@ export const update = async (req: Request, res: Response, next: NextFunction) =>
   }
 };
 
+export const remove = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await service.remove(req.params.id);
+    res.json({ success: true, data, message: 'Trainer deactivated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getBatches = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await service.getBatches(req.params.id);
