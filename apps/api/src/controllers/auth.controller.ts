@@ -48,7 +48,7 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
   try {
     const { email } = req.body;
     await authService.forgotPassword(email);
-    res.json({ success: true, message: 'Password reset link sent if email exists' });
+    res.status(501).json({ success: false, error: { code: 'NOT_CONFIGURED', message: 'Password reset email is not configured. Please contact your administrator.' } });
   } catch (error) {
     next(error);
   }
