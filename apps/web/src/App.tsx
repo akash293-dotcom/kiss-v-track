@@ -18,6 +18,7 @@ import CategoryForm from './pages/categories/CategoryForm';
 import ElectiveList from './pages/electives/ElectiveList';
 import ElectiveForm from './pages/electives/ElectiveForm';
 import ElectiveDetail from './pages/electives/ElectiveDetail';
+import ModuleForm from './pages/modules/ModuleForm';
 import TraineeList from './pages/trainees/TraineeList';
 import TraineeForm from './pages/trainees/TraineeForm';
 import TraineeDetail from './pages/trainees/TraineeDetail';
@@ -62,7 +63,7 @@ const App = () => {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600 mx-auto" />
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
           <p className="mt-4 text-gray-600">Loading KISS V-TRACK...</p>
         </div>
       </div>
@@ -82,70 +83,54 @@ const App = () => {
 
   return (
     <Routes>
-      {/* Public Routes */}
       <Route path="/login" element={!user ? <LoginPage /> : <Navigate to={getDashboardPath()} />} />
       <Route path="/verify/certificate/:certificateNo" element={<CertificateVerify />} />
 
-      {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute requiredRoles={['ADMIN', 'CENTRE_ADMIN']}><AppLayout /></ProtectedRoute>}>
         <Route path="dashboard" element={<AdminDashboard />} />
-        {/* Campuses */}
         <Route path="campuses" element={<CampusList />} />
         <Route path="campuses/new" element={<CampusForm />} />
         <Route path="campuses/:id/edit" element={<CampusForm />} />
-        {/* Categories */}
         <Route path="categories" element={<CategoryList />} />
         <Route path="categories/new" element={<CategoryForm />} />
         <Route path="categories/:id/edit" element={<CategoryForm />} />
-        {/* Electives */}
         <Route path="electives" element={<ElectiveList />} />
         <Route path="electives/new" element={<ElectiveForm />} />
         <Route path="electives/:id" element={<ElectiveDetail />} />
         <Route path="electives/:id/edit" element={<ElectiveForm />} />
-        {/* Trainees */}
+        <Route path="electives/:electiveId/modules/new" element={<ProtectedRoute requiredRoles={['ADMIN']}><ModuleForm /></ProtectedRoute>} />
+        <Route path="electives/:electiveId/modules/:moduleId/edit" element={<ProtectedRoute requiredRoles={['ADMIN']}><ModuleForm /></ProtectedRoute>} />
         <Route path="trainees" element={<TraineeList />} />
         <Route path="trainees/new" element={<TraineeForm />} />
         <Route path="trainees/:id" element={<TraineeDetail />} />
         <Route path="trainees/:id/edit" element={<TraineeForm />} />
-        {/* Trainers */}
         <Route path="trainers" element={<TrainerList />} />
         <Route path="trainers/new" element={<TrainerForm />} />
         <Route path="trainers/:id" element={<TrainerDetail />} />
         <Route path="trainers/:id/edit" element={<TrainerForm />} />
-        {/* Batches */}
         <Route path="batches" element={<BatchList />} />
         <Route path="batches/new" element={<BatchForm />} />
         <Route path="batches/:id" element={<BatchDetail />} />
         <Route path="batches/:id/edit" element={<BatchForm />} />
-        {/* Skills */}
         <Route path="skills" element={<SkillList />} />
         <Route path="skills/new" element={<SkillForm />} />
         <Route path="skills/:id/edit" element={<SkillForm />} />
-        {/* Sessions */}
         <Route path="sessions" element={<SessionList />} />
         <Route path="sessions/new" element={<SessionForm />} />
         <Route path="sessions/:id/edit" element={<SessionForm />} />
-        {/* Modules (nested under electives) */}
-        {/* Products */}
         <Route path="products" element={<ProductList />} />
         <Route path="products/:id" element={<ProductDetail />} />
-        {/* Assessments */}
         <Route path="assessments" element={<AssessmentList />} />
         <Route path="assessments/new" element={<AssessmentForm />} />
-        {/* Certificates */}
         <Route path="certificates" element={<CertificateList />} />
         <Route path="certificates/issue" element={<CertificateIssue />} />
         <Route path="certificates/:id" element={<CertificateDetail />} />
-        {/* Enrollment */}
         <Route path="enrollments/new" element={<EnrollmentForm />} />
-        {/* Reports */}
         <Route path="reports" element={<ReportsPage />} />
-        {/* Attendance */}
         <Route path="attendance" element={<AttendanceReport />} />
         <Route path="attendance/:sessionId" element={<AttendanceMarking />} />
       </Route>
 
-      {/* Trainer Routes */}
       <Route path="/trainer" element={<ProtectedRoute requiredRoles={['TRAINER']}><AppLayout /></ProtectedRoute>}>
         <Route path="dashboard" element={<TrainerDashboard />} />
         <Route path="batches" element={<BatchList />} />
@@ -167,7 +152,6 @@ const App = () => {
         <Route path="trainees/:id" element={<TraineeDetail />} />
       </Route>
 
-      {/* Trainee Routes */}
       <Route path="/trainee" element={<ProtectedRoute requiredRoles={['TRAINEE']}><AppLayout /></ProtectedRoute>}>
         <Route path="dashboard" element={<TraineeDashboard />} />
         <Route path="schedule" element={<SessionList />} />
@@ -184,7 +168,6 @@ const App = () => {
         <Route path="skill-passport" element={<SkillPassport />} />
       </Route>
 
-      {/* Default Redirect */}
       <Route path="/" element={<Navigate to={getDashboardPath()} />} />
       <Route path="*" element={<Navigate to={getDashboardPath()} />} />
     </Routes>

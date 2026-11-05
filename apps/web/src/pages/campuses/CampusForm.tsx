@@ -1,223 +1,100 @@
-import React from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormField } from '../../components/ui/FormField';
 import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import api from '../../lib/api';
 
-const ORGANIZATION_ID = '283c8d91-8cad-4a3f-8c6d-8e50bd215687';
-
 const campusSchema = z.object({
-  code: z.string().min(2, 'Code is required'),
-  name: z.string().min(3, 'Name is required'),
-  address: z.string().min(5, 'Address is required'),
-  city: z.string().min(2, 'City is required'),
-  state: z.string().min(2, 'State is required'),
-  zipCode: z.string().min(4, 'Zip is required'),
-  status: z.enum(['ACTIVE', 'INACTIVE']),
+  code: z.string().trim().min(2, 'Code is required'),
+  name: z.string().trim().min(3, 'Name is required'),
+  address: z.string().trim().min(5, 'Address is required'),
+  city: z.string().trim().min(2, 'City is required'),
+  state: z.string().trim().min(2, 'State is required'),
+  pincode: z.string().trim().min(4, 'Pincode is required'),
 });
-
-type CampusForm = z.infer<typeof campusSchema>;
+type CampusFormValues = z.infer<typeof campusSchema>;
 
 export default function CampusForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { id } = useParams<{ id: string }>();
+  const isEdit = Boolean(id);
 
-  const {
-    register,
-    handleSubmit,
-    formState: {
-      errors,
-      isSubmitting,
-    },
-  } = useForm<CampusForm>({
-    resolver: zodResolver(campusSchema),
-    defaultValues: {
-      status: 'ACTIVE',
-    },
+  const { data: campus, isLoading: campusLoading, isError: campusError } = useQuery({
+    queryKey: ['campus', id],
+    queryFn: async () => (await api.get(`/campuses/${id}`)).data?.data,
+    enabled: isEdit,
   });
 
-  const createMutation = useMutation({
-    mutationFn: async (data: CampusForm) => {
-      const payload = {
-        organizationId: ORGANIZATION_ID,
-        code: data.code,
-        name: data.name,
-        address: data.address,
-        city: data.city,
-        state: data.state,
-        pincode: data.zipCode,
-        isActive: data.status === 'ACTIVE',
-      };
-
-      return api.post('/campuses', payload);
+  // Campus creation needs the organisation foreign key. Reuse the organisation
+  // attached to an existing campus instead of relying on a hard-coded UUID.
+  const { data: existingCampuses = [], isLoading: campusesLoading } = useQuery({
+    queryKey: ['campuses', 'organization-lookup'],
+    queryFn: async () => {
+      const response = await api.get('/campuses', { params: { page: 1, limit: 1 } });
+      return Array.isArray(response.data?.data) ? response.data.data : [];
     },
+    enabled: !isEdit,
+  });
 
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<CampusFormValues>({
+    resolver: zodResolver(campusSchema),
+    defaultValues: { code: '', name: '', address: '', city: '', state: '', pincode: '' },
+  });
+
+  useEffect(() => {
+    if (!campus) return;
+    reset({ code: campus.code || '', name: campus.name || '', address: campus.address || '', city: campus.city || '', state: campus.state || '', pincode: campus.pincode || '' });
+  }, [campus, reset]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (values: CampusFormValues) => {
+      const payload = { ...values };
+      if (isEdit) return api.patch(`/campuses/${id}`, payload);
+      const organizationId = existingCampuses[0]?.organizationId;
+      if (!organizationId) throw new Error('No organisation is linked to an existing campus. Initialise the KISS organisation before adding another campus.');
+      return api.post('/campuses', { ...payload, organizationId });
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['campuses'],
-      });
-
-      await queryClient.invalidateQueries({
-        queryKey: ['adminDashboard'],
-      });
-
+      await queryClient.invalidateQueries({ queryKey: ['campuses'] });
+      await queryClient.invalidateQueries({ queryKey: ['campus', id] });
+      await queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
       navigate('/admin/campuses');
     },
-
-    onError: (error: any) => {
-      console.error('Create campus error:', error);
-
-      alert(
-        error?.response?.data?.error?.message ||
-        error?.response?.data?.message ||
-        'Failed to create campus'
-      );
-    },
+    onError: (error: any) => alert(error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Failed to save campus'),
   });
 
-  const onSubmit = async (data: CampusForm) => {
-    await createMutation.mutateAsync(data);
-  };
+  if ((isEdit && campusLoading) || (!isEdit && campusesLoading)) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
+  if (isEdit && (campusError || !campus)) return <Card title="Campus unavailable"><p className="text-sm text-red-600">This campus could not be loaded.</p><Button className="mt-4" onClick={() => navigate('/admin/campuses')}>Back to campuses</Button></Card>;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Add New Campus
-        </h1>
-
-        <p className="mt-1 text-sm text-gray-500">
-          Enter details to register a new campus location.
-        </p>
-      </div>
-
-      <div className="bg-white shadow rounded-lg p-6">
-
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-4"
-        >
-
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div><h1 className="text-2xl font-bold text-gray-900">{isEdit ? 'Edit Campus' : 'Add New Campus'}</h1><p className="mt-1 text-sm text-gray-500">{isEdit ? 'Update campus location details.' : 'Register a campus under the existing KISS organisation.'}</p></div>
+      <Card>
+        <form onSubmit={handleSubmit((values) => saveMutation.mutate(values))} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
-            <FormField
-              label="Campus Code"
-              required
-              error={errors.code?.message}
-            >
-              <Input
-                {...register('code')}
-                placeholder="e.g. CMP01"
-              />
-            </FormField>
-
-            <FormField
-              label="Campus Name"
-              required
-              error={errors.name?.message}
-            >
-              <Input
-                {...register('name')}
-                placeholder="e.g. Main Campus"
-              />
-            </FormField>
-
+            <FormField label="Campus code" required error={errors.code?.message}><Input {...register('code')} placeholder="e.g. KISS-BBSR" /></FormField>
+            <FormField label="Campus name" required error={errors.name?.message}><Input {...register('name')} placeholder="Campus name" /></FormField>
           </div>
-
-          <FormField
-            label="Address"
-            required
-            error={errors.address?.message}
-          >
-            <Input
-              {...register('address')}
-              placeholder="Street address"
-            />
-          </FormField>
-
+          <FormField label="Address" required error={errors.address?.message}><Input {...register('address')} placeholder="Street address" /></FormField>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-
-            <FormField
-              label="City"
-              required
-              error={errors.city?.message}
-            >
-              <Input {...register('city')} />
-            </FormField>
-
-            <FormField
-              label="State"
-              required
-              error={errors.state?.message}
-            >
-              <Input {...register('state')} />
-            </FormField>
-
-            <FormField
-              label="Zip Code"
-              required
-              error={errors.zipCode?.message}
-            >
-              <Input {...register('zipCode')} />
-            </FormField>
-
+            <FormField label="City" required error={errors.city?.message}><Input {...register('city')} /></FormField>
+            <FormField label="State" required error={errors.state?.message}><Input {...register('state')} /></FormField>
+            <FormField label="Pincode" required error={errors.pincode?.message}><Input {...register('pincode')} /></FormField>
           </div>
-
-          <FormField
-            label="Status"
-            required
-            error={errors.status?.message}
-          >
-            <Select
-              {...register('status')}
-              options={[
-                {
-                  label: 'Active',
-                  value: 'ACTIVE',
-                },
-                {
-                  label: 'Inactive',
-                  value: 'INACTIVE',
-                },
-              ]}
-            />
-          </FormField>
-
-          <div className="pt-4 flex justify-end space-x-3 border-t">
-
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => navigate(-1)}
-              disabled={
-                isSubmitting ||
-                createMutation.isPending
-              }
-            >
-              Cancel
-            </Button>
-
-            <Button
-              type="submit"
-              isLoading={
-                isSubmitting ||
-                createMutation.isPending
-              }
-            >
-              Save Campus
-            </Button>
-
+          <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+            <Button type="button" variant="ghost" onClick={() => navigate('/admin/campuses')}>Cancel</Button>
+            <Button type="submit" isLoading={saveMutation.isPending}>{isEdit ? 'Update Campus' : 'Save Campus'}</Button>
           </div>
-
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
