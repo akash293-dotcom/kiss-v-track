@@ -5,7 +5,6 @@ import {
   Pie,
   Cell,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -254,64 +253,57 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
 
         {/* Programs by Category */}
-        <div className="bg-white p-6 rounded-lg shadow">
-
-          <h3 className="text-xl font-medium text-gray-900 mb-4">
+        <div className="min-w-0 rounded-lg bg-white p-6 shadow">
+          <h3 className="mb-4 text-xl font-medium text-gray-900">
             Programs by Category
           </h3>
 
-          <div className="h-[420px]">
-
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
+          <div className="h-[320px] min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-
                 <Pie
                   data={skillDistribution}
                   cx="50%"
-                  cy="45%"
-                  innerRadius={70}
-                  outerRadius={150}
+                  cy="50%"
+                  innerRadius={62}
+                  outerRadius={118}
                   paddingAngle={2}
                   dataKey="value"
                   nameKey="label"
                   label={false}
                   labelLine={false}
                 >
-
-                  {skillDistribution.map(
-                    (_entry: any, index: number) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={
-                          COLORS[
-                            index % COLORS.length
-                          ]
-                        }
-                      />
-                    )
-                  )}
-
+                  {skillDistribution.map((_entry: any, index: number) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
+                  ))}
                 </Pie>
-
-                <Tooltip
-                  content={<CustomTooltip />}
-                />
-
-                <Legend
-                  verticalAlign="bottom"
-                  height={75}
-                />
-
+                <Tooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
-
           </div>
 
+          {/* Responsive legend: labels wrap and the card grows to fit every category. */}
+          <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+            {skillDistribution.map((entry: any, index: number) => (
+              <div
+                key={`legend-${entry.label ?? index}`}
+                className="flex min-w-0 items-start gap-2 text-sm leading-5"
+              >
+                <span
+                  aria-hidden="true"
+                  className="mt-1.5 h-3 w-3 shrink-0 rounded-sm"
+                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                />
+                <span className="min-w-0 break-words text-gray-600">
+                  {entry.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-
         {/* Skill Progress */}
         <div className="bg-white p-6 rounded-lg shadow">
 
