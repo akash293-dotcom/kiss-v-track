@@ -51,6 +51,17 @@ function getName(value: any) {
   return `${first} ${last}`.trim() || value?.user?.email || '-';
 }
 
+function buildRowState(records: any[]): Record<string, RowState> {
+  const next: Record<string, RowState> = {};
+  records.forEach((record: any) => {
+    next[record.traineeId] = {
+      status: record.status || null,
+      remarks: record.remarks || '',
+    };
+  });
+  return next;
+}
+
 export default function AttendanceMarking() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { user } = useAuth();
@@ -62,7 +73,7 @@ export default function AttendanceMarking() {
 
   const reportPath = user?.role === 'TRAINER' ? '/trainer/attendance' : '/admin/attendance';
 
-  const { data: attendanceData, isLoading, isError, refetch } = useQuery({
+  const { data: attendanceData, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['attendance-session', sessionId],
     queryFn: async () => {
       const response = await api.get('/attendance', { params: { sessionId } });
@@ -78,14 +89,7 @@ export default function AttendanceMarking() {
   });
 
   useEffect(() => {
-    const next: Record<string, RowState> = {};
-    (attendanceData?.records || []).forEach((record: any) => {
-      next[record.traineeId] = {
-        status: record.status || null,
-        remarks: record.remarks || '',
-      };
-    });
-    setState(next);
+    setState(buildRowState(attendanceData?.records || []));
   }, [attendanceData]);
 
   const records = attendanceData?.records || [];
@@ -158,11 +162,31 @@ export default function AttendanceMarking() {
   };
 
   const reset = () => {
-    const next: Record<string, RowState> = {};
-    records.forEach((record: any) => {
-      next[record.traineeId] = { status: record.status || null, remarks: record.remarks || '' };
-    });
-    setState(next);
+    setState(buildRowState(records));
+    setSearch('');
+    toast.success('Unsaved changes reset to the last saved attendance.');
+  };
+
+  const handleReload = async () => {
+    try {
+      const result = await refetch();
+      if (result.isError) {
+        const error: any = result.error;
+        toast.error(
+          error?.response?.data?.message ||
+          error?.response?.data?.error?.message ||
+          error?.message ||
+          'Unable to reload attendance.'
+        );
+        return;
+      }
+
+      const freshRecords = result.data?.records || [];
+      setState(buildRowState(freshRecords));
+      toast.success('Attendance register reloaded.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Unable to reload attendance.');
+    }
   };
 
   const back = () => {
@@ -206,7 +230,7 @@ export default function AttendanceMarking() {
             </div>
           </div>
         </div>
-        <Button variant="secondary" icon={<RotateCcw size={16} />} onClick={() => refetch()}>Reload</Button>
+        <Button variant="secondary" icon={<RotateCcw size={16} />} onClick={handleReload} isLoading={isFetching}>Reload</Button>
       </div>
 
       <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
