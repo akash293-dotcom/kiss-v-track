@@ -2,6 +2,16 @@ import { prisma } from '../lib/prisma';
 import { AppError, ForbiddenError } from '../lib/errors';
 import { ProductStatus, UserRole } from '@prisma/client';
 
+const parseOptionalProductDate = (value: unknown): Date | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new AppError('Invalid product production date', 400);
+  }
+  return parsed;
+};
+
 type Actor = {
   id: string;
   role: UserRole;
@@ -66,7 +76,7 @@ export const create = async (data: any) => {
 
   return prisma.$transaction(async (tx) => {
     const product = await tx.product.create({
-      data: { ...productData, traineeId, status: 'IDEA' },
+      data: { ...productData, productionDate: parseOptionalProductDate(productData.productionDate), traineeId, status: 'IDEA' },
     });
 
     if (skillIds && Array.isArray(skillIds) && skillIds.length > 0) {
@@ -90,6 +100,9 @@ export const update = async (id: string, data: any, actor: Actor) => {
   }
 
   const { skillIds, status, traineeId: _ignoredTraineeId, batchId: _ignoredBatchId, ...productData } = data;
+  if (Object.prototype.hasOwnProperty.call(productData, 'productionDate')) {
+    productData.productionDate = parseOptionalProductDate(productData.productionDate);
+  }
   return prisma.$transaction(async (tx) => {
     if (status && status !== product.status) {
       const allowed: Record<string, string[]> = {
